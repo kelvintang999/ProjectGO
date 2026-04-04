@@ -1,0 +1,1649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Project:GO — Visual Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   CSS RESET & BASE
+   ============================================ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-dark: #0d0d1a;
+  --bg-surface: #1a1a2e;
+  --bg-surface-2: #16213e;
+  --accent-cyan: #00f0ff;
+  --accent-cyan-dim: rgba(0, 240, 255, 0.3);
+  --accent-orange: #ff6b35;
+  --accent-orange-dim: rgba(255, 107, 53, 0.3);
+  --text-primary: #e8eaf0;
+  --text-muted: #6b7394;
+  --text-dim: #3a3f5c;
+  --exp-green: #39ff14;
+  --font-display: 'Rajdhani', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --phone-w: 375px;
+  --phone-h: 812px;
+  --phone-radius: 44px;
+  --notch-w: 150px;
+  --notch-h: 30px;
+}
+
+body {
+  background: #08080f;
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================
+   PHONE FRAME
+   ============================================ */
+.phone-frame {
+  position: relative;
+  width: var(--phone-w);
+  height: var(--phone-h);
+  border-radius: var(--phone-radius);
+  background: var(--bg-dark);
+  overflow: hidden;
+  box-shadow:
+    0 0 0 3px #2a2a40,
+    0 0 0 6px #111120,
+    0 25px 80px rgba(0, 0, 0, 0.7),
+    0 0 60px rgba(0, 240, 255, 0.08),
+    inset 0 0 30px rgba(0, 0, 0, 0.3);
+}
+
+/* Notch */
+.phone-frame::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--notch-w);
+  height: var(--notch-h);
+  background: #111120;
+  border-radius: 0 0 18px 18px;
+  z-index: 1000;
+}
+
+/* Home indicator */
+.phone-frame::after {
+  content: '';
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 134px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  z-index: 1000;
+}
+
+/* ============================================
+   SCREENS — Shared
+   ============================================ */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+.screen.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ============================================
+   MAIN MENU SCREEN
+   ============================================ */
+#main-menu {
+  background: linear-gradient(170deg, #0d0d1a 0%, #1a1a2e 40%, #0f1628 100%);
+}
+
+/* Animated grid background */
+.menu-bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,240,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,255,0.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+  animation: gridScroll 20s linear infinite;
+}
+@keyframes gridScroll {
+  0% { background-position: 0 0; }
+  100% { background-position: 30px 60px; }
+}
+
+/* Particles */
+.particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.particle {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: var(--accent-cyan);
+  border-radius: 50%;
+  opacity: 0;
+  animation: particleFloat linear infinite;
+}
+@keyframes particleFloat {
+  0% { opacity: 0; transform: translateY(100%) scale(0); }
+  10% { opacity: 0.8; }
+  90% { opacity: 0.2; }
+  100% { opacity: 0; transform: translateY(-100vh) scale(1.5); }
+}
+
+.menu-content {
+  position: relative;
+  z-index: 10;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 70px 30px 40px;
+}
+
+/* Logo */
+.logo-container {
+  margin-top: 30px;
+}
+.logo-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 48px;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  text-shadow:
+    0 0 20px rgba(0, 240, 255, 0.5),
+    0 0 40px rgba(0, 240, 255, 0.2),
+    0 0 80px rgba(0, 240, 255, 0.1);
+  line-height: 1;
+}
+.logo-subtitle {
+  font-family: var(--font-body);
+  font-size: 11px;
+  letter-spacing: 8px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  text-transform: uppercase;
+}
+
+/* Decorative line */
+.deco-line {
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-cyan), transparent);
+  margin-top: 16px;
+}
+
+/* Start button area */
+.start-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 30px;
+}
+
+.start-btn {
+  position: relative;
+  background: transparent;
+  border: 2px solid var(--accent-cyan);
+  color: var(--accent-cyan);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 32px;
+  letter-spacing: 10px;
+  padding: 16px 56px;
+  cursor: pointer;
+  text-transform: uppercase;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+.start-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent-cyan);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.start-btn:hover::before,
+.start-btn:active::before {
+  opacity: 0.1;
+}
+.start-btn::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--accent-cyan);
+  opacity: 0;
+  animation: startPulse 2s ease-in-out infinite;
+}
+@keyframes startPulse {
+  0%, 100% { opacity: 0; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.04); }
+}
+
+.start-btn:active {
+  transform: scale(0.97);
+}
+
+.start-label-cn {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-top: 10px;
+  letter-spacing: 4px;
+}
+.start-label-sub {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+/* Bottom bar */
+.menu-bottom {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px 24px;
+}
+
+.settings-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--text-muted);
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  transition: all 0.2s ease;
+}
+.settings-btn:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+.settings-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.version-text {
+  font-family: var(--font-body);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+/* ============================================
+   GTA INTRO ANIMATION
+   ============================================ */
+#intro-screen {
+  background: #000;
+  z-index: 100;
+}
+
+.intro-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  z-index: 5;
+}
+
+.intro-dive {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  opacity: 0;
+}
+
+/* Grid rush effect */
+.intro-grid-rush {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: 0;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 38px,
+      rgba(0,240,255,0.08) 38px,
+      rgba(0,240,255,0.08) 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 38px,
+      rgba(0,240,255,0.08) 38px,
+      rgba(0,240,255,0.08) 40px
+    );
+  animation: none;
+}
+
+@keyframes gridRush {
+  0% { transform: scale(1) perspective(500px) translateZ(0); opacity: 0.6; }
+  100% { transform: scale(3) perspective(500px) translateZ(200px); opacity: 0; }
+}
+
+/* City silhouette */
+.intro-city {
+  position: absolute;
+  bottom: 30%;
+  left: 0;
+  right: 0;
+  height: 200px;
+  z-index: 2;
+  opacity: 0;
+  overflow: hidden;
+}
+.intro-city-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+}
+.building {
+  background: linear-gradient(to top, #0a0a1a, #1a1a3e);
+  border-top: 1px solid rgba(0,240,255,0.15);
+  position: relative;
+}
+.building::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 6px,
+    rgba(255,200,50,0.15) 6px,
+    rgba(255,200,50,0.15) 8px
+  );
+}
+
+.intro-title-container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.intro-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 52px;
+  letter-spacing: 6px;
+  color: #fff;
+  text-shadow:
+    0 0 30px rgba(0, 240, 255, 0.8),
+    0 0 60px rgba(0, 240, 255, 0.4),
+    0 0 120px rgba(0, 240, 255, 0.2);
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 3px solid var(--accent-cyan);
+}
+.intro-title.typing {
+  animation: blinkCursor 0.5s step-end infinite;
+}
+@keyframes blinkCursor {
+  0%, 100% { border-color: var(--accent-cyan); }
+  50% { border-color: transparent; }
+}
+.intro-title.done {
+  border-color: transparent;
+}
+
+.intro-subtitle {
+  font-family: var(--font-body);
+  font-size: 13px;
+  letter-spacing: 6px;
+  color: rgba(255,255,255,0.6);
+  margin-top: 12px;
+  opacity: 0;
+  text-transform: uppercase;
+}
+
+.intro-fade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  z-index: 20;
+  opacity: 0;
+}
+
+.skip-btn {
+  position: absolute;
+  bottom: 50px;
+  right: 24px;
+  z-index: 30;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.4);
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 6px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 2px;
+  transition: all 0.2s ease;
+}
+.skip-btn:hover {
+  border-color: rgba(255,255,255,0.5);
+  color: rgba(255,255,255,0.7);
+}
+
+/* ============================================
+   MAP SCREEN
+   ============================================ */
+#map-screen {
+  background: #0f1218;
+}
+
+/* Fake dark map */
+.map-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Main road grid */
+.map-roads {
+  position: absolute;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+}
+
+.map-road {
+  position: absolute;
+  background: rgba(40, 45, 60, 0.8);
+}
+
+/* Horizontal roads */
+.map-road.h1 { top: 25%; left: 0; right: 0; height: 12px; }
+.map-road.h2 { top: 45%; left: 0; right: 0; height: 8px; }
+.map-road.h3 { top: 65%; left: 0; right: 0; height: 14px; }
+.map-road.h4 { top: 82%; left: 0; right: 0; height: 6px; }
+
+/* Vertical roads */
+.map-road.v1 { left: 20%; top: 0; bottom: 0; width: 10px; }
+.map-road.v2 { left: 40%; top: 0; bottom: 0; width: 14px; }
+.map-road.v3 { left: 60%; top: 0; bottom: 0; width: 8px; }
+.map-road.v4 { left: 80%; top: 0; bottom: 0; width: 12px; }
+
+/* City blocks (darker areas between roads) */
+.map-block {
+  position: absolute;
+  background: rgba(20, 24, 35, 0.6);
+  border: 1px solid rgba(40, 45, 60, 0.3);
+  border-radius: 2px;
+}
+
+/* Subtle grid overlay */
+.map-grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,240,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,255,0.015) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Park / green area */
+.map-park {
+  position: absolute;
+  background: rgba(20, 60, 30, 0.3);
+  border: 1px solid rgba(40, 100, 50, 0.2);
+  border-radius: 12px;
+}
+
+/* Water feature */
+.map-water {
+  position: absolute;
+  background: linear-gradient(135deg, rgba(10, 30, 60, 0.6), rgba(0, 60, 100, 0.3));
+  border: 1px solid rgba(0, 100, 150, 0.2);
+  border-radius: 50%;
+}
+
+/* Compass */
+.compass {
+  position: absolute;
+  top: 45px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: 44px;
+  height: 44px;
+}
+.compass-ring {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  background: rgba(10,10,20,0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.compass-needle {
+  width: 3px;
+  height: 24px;
+  position: relative;
+  animation: compassWobble 6s ease-in-out infinite;
+}
+.compass-needle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 12px solid #ff3333;
+}
+.compass-needle::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 10px solid rgba(255,255,255,0.5);
+}
+.compass-n {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+  color: #ff3333;
+}
+@keyframes compassWobble {
+  0%, 100% { transform: rotate(-2deg); }
+  25% { transform: rotate(3deg); }
+  50% { transform: rotate(-1deg); }
+  75% { transform: rotate(2deg); }
+}
+
+/* Hamburger menu button */
+.hamburger-btn {
+  position: absolute;
+  top: 45px;
+  right: 20px;
+  z-index: 20;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255,255,255,0.12);
+  background: rgba(10,10,20,0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.hamburger-btn:hover {
+  border-color: var(--accent-cyan);
+  background: rgba(0,240,255,0.08);
+}
+.hamburger-btn span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 1px;
+  transition: all 0.3s ease;
+}
+
+/* Player dot */
+.player-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 15;
+}
+.player-dot-inner {
+  width: 16px;
+  height: 16px;
+  background: var(--accent-cyan);
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.9);
+  box-shadow: 0 0 20px rgba(0,240,255,0.6);
+  position: relative;
+}
+.player-dot-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0,240,255,0.2);
+  animation: playerPulse 2s ease-out infinite;
+}
+@keyframes playerPulse {
+  0% { width: 16px; height: 16px; opacity: 0.6; }
+  100% { width: 80px; height: 80px; opacity: 0; }
+}
+
+/* Player direction indicator */
+.player-direction {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid var(--accent-cyan);
+  filter: drop-shadow(0 0 4px rgba(0,240,255,0.5));
+}
+
+/* EXP bar */
+.exp-bar-container {
+  position: absolute;
+  bottom: 30px;
+  left: 20px;
+  right: 20px;
+  z-index: 20;
+  background: rgba(10,10,20,0.8);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 10px 14px;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.exp-bar-container.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.exp-bar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.exp-level {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--accent-cyan);
+}
+.exp-label {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 3px;
+}
+.exp-numbers {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.exp-bar-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.exp-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00cc44, var(--exp-green));
+  border-radius: 3px;
+  width: 0%;
+  transition: width 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.3s;
+  box-shadow: 0 0 8px rgba(57, 255, 20, 0.4);
+}
+
+/* POI markers */
+.poi-marker {
+  position: absolute;
+  z-index: 12;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.poi-marker-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid;
+}
+.poi-marker.orange .poi-marker-dot {
+  background: rgba(255,107,53,0.3);
+  border-color: var(--accent-orange);
+  box-shadow: 0 0 10px rgba(255,107,53,0.3);
+}
+.poi-marker.cyan .poi-marker-dot {
+  background: rgba(0,240,255,0.3);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(0,240,255,0.3);
+}
+.poi-marker.purple .poi-marker-dot {
+  background: rgba(160,80,255,0.3);
+  border-color: #a050ff;
+  box-shadow: 0 0 10px rgba(160,80,255,0.3);
+}
+
+/* ============================================
+   SIDE MENU
+   ============================================ */
+.side-menu-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.side-menu-overlay.open {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+.side-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.side-menu-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 280px;
+  background: linear-gradient(180deg, #12122a 0%, #1a1a2e 50%, #0f1628 100%);
+  border-left: 1px solid rgba(0,240,255,0.1);
+  transform: translateX(100%);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  padding: 60px 20px 40px;
+}
+.side-menu-overlay.open .side-menu-panel {
+  transform: translateX(0);
+}
+
+.side-menu-close {
+  position: absolute;
+  top: 50px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.side-menu-close:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.side-menu-header {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 4px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  padding-left: 4px;
+}
+
+.side-menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.menu-btn {
+  position: relative;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+.menu-btn::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent-cyan);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.menu-btn:hover {
+  background: rgba(0,240,255,0.06);
+  border-color: rgba(0,240,255,0.2);
+  transform: translateX(-4px);
+}
+.menu-btn:hover::before {
+  opacity: 1;
+}
+.menu-btn:active {
+  transform: scale(0.97) translateX(-4px);
+}
+
+.menu-btn-icon {
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+.menu-btn-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text-primary);
+  letter-spacing: 2px;
+}
+.menu-btn-sub {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* Individual button accent colors */
+.menu-btn.event-btn:hover { border-color: rgba(0,240,255,0.3); }
+.menu-btn.event-btn::before { background: var(--accent-cyan); }
+
+.menu-btn.team-btn:hover { border-color: rgba(255,107,53,0.3); }
+.menu-btn.team-btn::before { background: var(--accent-orange); }
+
+.menu-btn.worlds-btn:hover { border-color: rgba(160,80,255,0.3); }
+.menu-btn.worlds-btn::before { background: #a050ff; }
+
+.menu-btn.more-btn:hover { border-color: rgba(255,255,255,0.2); }
+.menu-btn.more-btn::before { background: var(--text-muted); }
+
+/* ============================================
+   TOAST NOTIFICATION
+   ============================================ */
+.toast {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  z-index: 200;
+  background: rgba(20, 20, 40, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0,240,255,0.2);
+  border-radius: 12px;
+  padding: 14px 24px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast-label {
+  font-size: 10px;
+  color: var(--accent-cyan);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+/* ============================================
+   SETTINGS PANEL (simple overlay)
+   ============================================ */
+.settings-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.settings-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.settings-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+}
+.settings-panel {
+  position: relative;
+  z-index: 1;
+  width: 280px;
+  background: linear-gradient(180deg, #1a1a2e, #12122a);
+  border: 1px solid rgba(0,240,255,0.15);
+  border-radius: 16px;
+  padding: 24px;
+  transform: scale(0.9);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.settings-overlay.open .settings-panel {
+  transform: scale(1);
+}
+.settings-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 3px;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+.settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.settings-item-label {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.settings-toggle {
+  width: 40px;
+  height: 22px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 11px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.settings-toggle.on {
+  background: var(--accent-cyan);
+}
+.settings-toggle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+.settings-toggle.on::after {
+  transform: translateX(18px);
+}
+.settings-close-btn {
+  width: 100%;
+  margin-top: 20px;
+  padding: 10px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.settings-close-btn:hover {
+  background: rgba(0,240,255,0.08);
+  border-color: var(--accent-cyan);
+}
+
+/* ============================================
+   MAP LOCATION LABELS
+   ============================================ */
+.map-label {
+  position: absolute;
+  z-index: 11;
+  font-family: var(--font-body);
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.15);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ============================================
+   RESPONSIVE — On actual mobile, fill screen
+   ============================================ */
+@media (max-width: 420px) {
+  .phone-frame {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .phone-frame::before { display: none; }
+  .phone-frame::after { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="phone-frame" id="phoneFrame">
+
+  <!-- ===== MAIN MENU ===== -->
+  <div class="screen active" id="main-menu">
+    <div class="menu-bg-grid"></div>
+    <div class="particles" id="particles"></div>
+    <div class="menu-content">
+      <div class="logo-container">
+        <div class="logo-title">PROJECT:GO</div>
+        <div class="logo-subtitle">Explore Your World</div>
+        <div class="deco-line"></div>
+      </div>
+      <div class="start-area">
+        <button class="start-btn" id="startBtn" aria-label="Start Game">START</button>
+        <div class="start-label-cn">開始</div>
+        <div class="start-label-sub">&gt;GTA進場動畫</div>
+      </div>
+    </div>
+    <div class="menu-bottom">
+      <button class="settings-btn" id="settingsBtn" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
+      <div class="version-text">v0.1.0 ALPHA</div>
+    </div>
+  </div>
+
+  <!-- ===== SETTINGS OVERLAY ===== -->
+  <div class="settings-overlay" id="settingsOverlay">
+    <div class="settings-backdrop" id="settingsBackdrop"></div>
+    <div class="settings-panel">
+      <div class="settings-title">SETTINGS</div>
+      <div class="settings-item">
+        <span class="settings-item-label">Sound</span>
+        <div class="settings-toggle on" data-toggle></div>
+      </div>
+      <div class="settings-item">
+        <span class="settings-item-label">Vibration</span>
+        <div class="settings-toggle on" data-toggle></div>
+      </div>
+      <div class="settings-item">
+        <span class="settings-item-label">Notifications</span>
+        <div class="settings-toggle" data-toggle></div>
+      </div>
+      <div class="settings-item">
+        <span class="settings-item-label">AR Mode</span>
+        <div class="settings-toggle on" data-toggle></div>
+      </div>
+      <button class="settings-close-btn" id="settingsCloseBtn">CLOSE</button>
+    </div>
+  </div>
+
+  <!-- ===== GTA INTRO ===== -->
+  <div class="screen" id="intro-screen">
+    <div class="intro-flash" id="introFlash"></div>
+    <div class="intro-grid-rush" id="introGridRush"></div>
+    <div class="intro-city" id="introCity">
+      <div class="intro-city-inner" id="cityInner"></div>
+    </div>
+    <div class="intro-title-container">
+      <div class="intro-title" id="introTitle"></div>
+      <div class="intro-subtitle" id="introSubtitle">EXPLORE YOUR WORLD</div>
+    </div>
+    <div class="intro-fade" id="introFade"></div>
+    <button class="skip-btn" id="skipBtn">SKIP ▸</button>
+  </div>
+
+  <!-- ===== MAP SCREEN ===== -->
+  <div class="screen" id="map-screen">
+    <div class="map-bg">
+      <!-- Roads -->
+      <div class="map-roads">
+        <div class="map-road h1"></div>
+        <div class="map-road h2"></div>
+        <div class="map-road h3"></div>
+        <div class="map-road h4"></div>
+        <div class="map-road v1"></div>
+        <div class="map-road v2"></div>
+        <div class="map-road v3"></div>
+        <div class="map-road v4"></div>
+      </div>
+
+      <!-- City blocks -->
+      <div class="map-block" style="top:8%;left:5%;width:50px;height:65px;"></div>
+      <div class="map-block" style="top:10%;left:25%;width:45px;height:50px;"></div>
+      <div class="map-block" style="top:5%;left:55%;width:60px;height:80px;"></div>
+      <div class="map-block" style="top:15%;left:82%;width:40px;height:40px;"></div>
+      <div class="map-block" style="top:30%;left:8%;width:35px;height:55px;"></div>
+      <div class="map-block" style="top:28%;left:45%;width:50px;height:65px;"></div>
+      <div class="map-block" style="top:35%;left:72%;width:55px;height:45px;"></div>
+      <div class="map-block" style="top:52%;left:5%;width:48px;height:50px;"></div>
+      <div class="map-block" style="top:50%;left:30%;width:35px;height:60px;"></div>
+      <div class="map-block" style="top:55%;left:65%;width:45px;height:40px;"></div>
+      <div class="map-block" style="top:70%;left:15%;width:60px;height:45px;"></div>
+      <div class="map-block" style="top:72%;left:50%;width:40px;height:50px;"></div>
+      <div class="map-block" style="top:68%;left:80%;width:50px;height:55px;"></div>
+      <div class="map-block" style="top:88%;left:35%;width:55px;height:35px;"></div>
+
+      <!-- Park -->
+      <div class="map-park" style="top:36%;left:12%;width:60px;height:45px;"></div>
+
+      <!-- Water -->
+      <div class="map-water" style="top:75%;left:5%;width:50px;height:35px;"></div>
+
+      <!-- Grid overlay -->
+      <div class="map-grid-overlay"></div>
+
+      <!-- Location labels -->
+      <div class="map-label" style="top:20%;left:7%;">Central Ave</div>
+      <div class="map-label" style="top:48%;left:42%;">Tech District</div>
+      <div class="map-label" style="top:79%;left:55%;">Harbor View</div>
+      <div class="map-label" style="top:12%;left:60%;">Old Town</div>
+
+      <!-- POI markers -->
+      <div class="poi-marker orange" style="top:22%;left:30%;">
+        <div class="poi-marker-dot"></div>
+      </div>
+      <div class="poi-marker cyan" style="top:42%;left:62%;">
+        <div class="poi-marker-dot"></div>
+      </div>
+      <div class="poi-marker purple" style="top:60%;left:22%;">
+        <div class="poi-marker-dot"></div>
+      </div>
+      <div class="poi-marker orange" style="top:80%;left:70%;">
+        <div class="poi-marker-dot"></div>
+      </div>
+    </div>
+
+    <!-- Compass -->
+    <div class="compass">
+      <div class="compass-ring">
+        <div class="compass-n">N</div>
+        <div class="compass-needle"></div>
+      </div>
+    </div>
+
+    <!-- Hamburger -->
+    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Open Menu">
+      <span></span><span></span><span></span>
+    </button>
+
+    <!-- Player dot -->
+    <div class="player-dot">
+      <div class="player-dot-pulse"></div>
+      <div class="player-dot-inner">
+        <div class="player-direction"></div>
+      </div>
+    </div>
+
+    <!-- EXP bar -->
+    <div class="exp-bar-container" id="expBar">
+      <div class="exp-bar-header">
+        <span class="exp-level">Lv.5</span>
+        <span class="exp-label">E X P</span>
+        <span class="exp-numbers">1,200 / 2,000</span>
+      </div>
+      <div class="exp-bar-track">
+        <div class="exp-bar-fill" id="expFill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SIDE MENU ===== -->
+  <div class="side-menu-overlay" id="sideMenu">
+    <div class="side-menu-backdrop" id="sideMenuBackdrop"></div>
+    <div class="side-menu-panel">
+      <button class="side-menu-close" id="sideMenuClose" aria-label="Close Menu">✕</button>
+      <div class="side-menu-header">MENU</div>
+      <div class="side-menu-buttons">
+        <button class="menu-btn event-btn" data-section="EVENT 活動">
+          <div class="menu-btn-icon">🎮</div>
+          <div class="menu-btn-title">EVENT 活動</div>
+          <div class="menu-btn-sub">(聯動、劇情、小遊戲...)</div>
+        </button>
+        <button class="menu-btn team-btn" data-section="TEAM 隊伍">
+          <div class="menu-btn-icon">👥</div>
+          <div class="menu-btn-title">TEAM 隊伍</div>
+          <div class="menu-btn-sub">(抽卡、好友...)</div>
+        </button>
+        <button class="menu-btn worlds-btn" data-section="WORLDS 多人世界">
+          <div class="menu-btn-icon">🌍</div>
+          <div class="menu-btn-title">WORLDS 多人世界</div>
+          <div class="menu-btn-sub">(經營、音樂、掛機...)</div>
+        </button>
+        <button class="menu-btn more-btn" data-section="MORE">
+          <div class="menu-btn-icon">⋯</div>
+          <div class="menu-btn-title">MORE...</div>
+          <div class="menu-btn-sub"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TOAST ===== -->
+  <div class="toast" id="toast">
+    <div class="toast-label">COMING SOON</div>
+    <div class="toast-text" id="toastText"></div>
+  </div>
+
+</div>
+
+<script>
+// ============================================
+// STATE
+// ============================================
+let currentScreen = 'main-menu';
+let introTimeout = null;
+let introSkipped = false;
+
+// ============================================
+// PARTICLES
+// ============================================
+(function initParticles() {
+  const container = document.getElementById('particles');
+  for (let i = 0; i < 30; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.style.left = Math.random() * 100 + '%';
+    p.style.top = Math.random() * 100 + '%';
+    p.style.width = (1 + Math.random() * 2) + 'px';
+    p.style.height = p.style.width;
+    p.style.animationDuration = (5 + Math.random() * 10) + 's';
+    p.style.animationDelay = (Math.random() * 8) + 's';
+    if (Math.random() > 0.7) {
+      p.style.background = 'var(--accent-orange)';
+    }
+    container.appendChild(p);
+  }
+})();
+
+// ============================================
+// CITY SILHOUETTE (for intro)
+// ============================================
+(function initCity() {
+  const cityInner = document.getElementById('cityInner');
+  const buildingCount = 40;
+  for (let i = 0; i < buildingCount; i++) {
+    const b = document.createElement('div');
+    b.className = 'building';
+    const w = 5 + Math.random() * 12;
+    const h = 30 + Math.random() * 160;
+    b.style.width = w + 'px';
+    b.style.height = h + 'px';
+    b.style.flexShrink = '0';
+    cityInner.appendChild(b);
+  }
+})();
+
+// ============================================
+// SCREEN TRANSITIONS
+// ============================================
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const screen = document.getElementById(id);
+  screen.classList.add('active');
+  currentScreen = id;
+}
+
+// ============================================
+// START BUTTON → GTA INTRO
+// ============================================
+document.getElementById('startBtn').addEventListener('click', () => {
+  introSkipped = false;
+  startIntro();
+});
+
+function startIntro() {
+  showScreen('intro-screen');
+  const flash = document.getElementById('introFlash');
+  const gridRush = document.getElementById('introGridRush');
+  const city = document.getElementById('introCity');
+  const title = document.getElementById('introTitle');
+  const subtitle = document.getElementById('introSubtitle');
+  const fade = document.getElementById('introFade');
+
+  // Reset everything
+  flash.style.opacity = '0';
+  gridRush.style.opacity = '0';
+  gridRush.style.animation = 'none';
+  city.style.opacity = '0';
+  title.style.opacity = '0';
+  title.textContent = '';
+  title.className = 'intro-title';
+  subtitle.style.opacity = '0';
+  fade.style.opacity = '0';
+
+  const timeouts = [];
+  function safeTimeout(fn, ms) {
+    const t = setTimeout(() => { if (!introSkipped) fn(); }, ms);
+    timeouts.push(t);
+    return t;
+  }
+
+  // Sequence
+  // 0ms: black screen
+  // 200ms: flash 1
+  safeTimeout(() => { flash.style.transition = 'opacity 0.05s'; flash.style.opacity = '1'; }, 200);
+  safeTimeout(() => { flash.style.opacity = '0'; }, 280);
+  // 500ms: flash 2
+  safeTimeout(() => { flash.style.opacity = '0.8'; }, 500);
+  safeTimeout(() => { flash.style.opacity = '0'; }, 560);
+  // 800ms: flash 3
+  safeTimeout(() => { flash.style.opacity = '0.6'; }, 800);
+  safeTimeout(() => { flash.style.opacity = '0'; }, 850);
+  // 1000ms: flash 4
+  safeTimeout(() => { flash.style.opacity = '0.4'; }, 1000);
+  safeTimeout(() => { flash.style.opacity = '0'; }, 1040);
+
+  // 1100ms: Grid rush + city
+  safeTimeout(() => {
+    gridRush.style.animation = 'gridRush 2.5s ease-out forwards';
+    city.style.transition = 'opacity 0.5s ease';
+    city.style.opacity = '0.5';
+  }, 1100);
+
+  // Dive zoom on city
+  safeTimeout(() => {
+    city.style.transition = 'transform 2s ease-in, opacity 1.5s ease';
+    city.style.transform = 'scale(2.5) translateY(30%)';
+    city.style.opacity = '0';
+  }, 1400);
+
+  // 2000ms: Typewriter title
+  safeTimeout(() => {
+    title.style.opacity = '1';
+    title.classList.add('typing');
+    const text = 'PROJECT:GO';
+    let i = 0;
+    function typeNext() {
+      if (introSkipped) return;
+      if (i < text.length) {
+        title.textContent += text[i];
+        i++;
+        setTimeout(typeNext, 80 + Math.random() * 40);
+      } else {
+        title.classList.remove('typing');
+        title.classList.add('done');
+      }
+    }
+    typeNext();
+  }, 2000);
+
+  // 3400ms: Subtitle fade in
+  safeTimeout(() => {
+    subtitle.style.transition = 'opacity 0.8s ease';
+    subtitle.style.opacity = '1';
+  }, 3400);
+
+  // 5000ms: Fade to black
+  safeTimeout(() => {
+    fade.style.transition = 'opacity 0.6s ease';
+    fade.style.opacity = '1';
+  }, 5000);
+
+  // 5600ms: Go to map
+  safeTimeout(() => {
+    goToMap();
+  }, 5700);
+
+  // Store timeouts for skip
+  window._introTimeouts = timeouts;
+}
+
+// ============================================
+// SKIP BUTTON
+// ============================================
+document.getElementById('skipBtn').addEventListener('click', () => {
+  skipIntro();
+});
+
+function skipIntro() {
+  introSkipped = true;
+  if (window._introTimeouts) {
+    window._introTimeouts.forEach(t => clearTimeout(t));
+  }
+  goToMap();
+}
+
+// ============================================
+// MAP SCREEN
+// ============================================
+function goToMap() {
+  showScreen('map-screen');
+
+  // Animate EXP bar in
+  const expBar = document.getElementById('expBar');
+  const expFill = document.getElementById('expFill');
+
+  // Reset
+  expBar.classList.remove('visible');
+  expFill.style.width = '0%';
+
+  setTimeout(() => {
+    expBar.classList.add('visible');
+  }, 300);
+
+  setTimeout(() => {
+    expFill.style.width = '60%'; // 1200/2000
+  }, 600);
+}
+
+// ============================================
+// HAMBURGER → SIDE MENU
+// ============================================
+const sideMenu = document.getElementById('sideMenu');
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const sideMenuClose = document.getElementById('sideMenuClose');
+const sideMenuBackdrop = document.getElementById('sideMenuBackdrop');
+
+hamburgerBtn.addEventListener('click', () => {
+  sideMenu.classList.add('open');
+});
+
+sideMenuClose.addEventListener('click', () => {
+  sideMenu.classList.remove('open');
+});
+
+sideMenuBackdrop.addEventListener('click', () => {
+  sideMenu.classList.remove('open');
+});
+
+// Touch swipe to close
+let touchStartX = 0;
+sideMenu.addEventListener('touchstart', (e) => {
+  touchStartX = e.touches[0].clientX;
+}, { passive: true });
+
+sideMenu.addEventListener('touchend', (e) => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if (dx > 60) {
+    sideMenu.classList.remove('open');
+  }
+}, { passive: true });
+
+// ============================================
+// MENU BUTTONS → TOAST
+// ============================================
+document.querySelectorAll('.menu-btn[data-section]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const section = btn.getAttribute('data-section');
+    showToast(section);
+  });
+});
+
+function showToast(section) {
+  const toast = document.getElementById('toast');
+  const toastText = document.getElementById('toastText');
+  toastText.textContent = section;
+  toast.classList.add('visible');
+  setTimeout(() => {
+    toast.classList.remove('visible');
+  }, 2000);
+}
+
+// ============================================
+// SETTINGS
+// ============================================
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsOverlay = document.getElementById('settingsOverlay');
+const settingsBackdrop = document.getElementById('settingsBackdrop');
+const settingsCloseBtn = document.getElementById('settingsCloseBtn');
+
+settingsBtn.addEventListener('click', () => {
+  settingsOverlay.classList.add('open');
+});
+settingsBackdrop.addEventListener('click', () => {
+  settingsOverlay.classList.remove('open');
+});
+settingsCloseBtn.addEventListener('click', () => {
+  settingsOverlay.classList.remove('open');
+});
+
+// Toggle switches
+document.querySelectorAll('[data-toggle]').forEach(toggle => {
+  toggle.addEventListener('click', () => {
+    toggle.classList.toggle('on');
+  });
+});
+
+</script>
+<script data-pplx-inline-edit>
+(function(){
+  if(window===window.top)return;
+  function inlineAll(orig,clone){
+    if(orig.nodeType!==1)return;
+    try{
+      var cs=getComputedStyle(orig);
+      var t='';
+      for(var i=0;i<cs.length;i++){t+=cs[i]+':'+cs.getPropertyValue(cs[i])+';';}
+      clone.style.cssText=t;
+    }catch(e){}
+    var oc=orig.children,cc=clone.children;
+    for(var j=0;j<oc.length&&j<cc.length;j++){inlineAll(oc[j],cc[j]);}
+  }
+  function stripExternal(clone){
+    var imgs=clone.querySelectorAll('img');
+    for(var i=0;i<imgs.length;i++){
+      var s=imgs[i].getAttribute('src');
+      if(s&&!s.startsWith('data:'))imgs[i].removeAttribute('src');
+    }
+    var all=clone.querySelectorAll('*');
+    for(var i=0;i<all.length;i++){
+      var st=all[i].style.cssText;
+      if(st&&st.indexOf('url(')>=0){
+        all[i].style.cssText=st.replace(/url\(["']?(?!data:)[^)"']*["']?\)/gi,'none');
+      }
+    }
+  }
+  window.addEventListener('message',function(e){
+    if(!e.data||e.data.type!=='INLINE_EDIT_CAPTURE_REQUEST')return;
+    var scrollX=window.scrollX||window.pageXOffset||0;
+    var scrollY=window.scrollY||window.pageYOffset||0;
+    var w=window.innerWidth,h=window.innerHeight;
+    try{
+      var clone=document.documentElement.cloneNode(true);
+      var rm=clone.querySelectorAll('script,link[rel="stylesheet"],style');
+      for(var i=0;i<rm.length;i++){rm[i].remove();}
+      inlineAll(document.documentElement,clone);
+      stripExternal(clone);
+      var html=new XMLSerializer().serializeToString(clone);
+      var svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'">'
+        +'<foreignObject width="100%" height="100%">'
+        +'<div xmlns="http://www.w3.org/1999/xhtml" style="width:'+w+'px;height:'+h+'px;overflow:hidden">'
+        +'<div style="transform:translate(-'+scrollX+'px,-'+scrollY+'px);transform-origin:top left">'
+        +html+'</div></div></foreignObject></svg>';
+      var svgUrl='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+      var img=new Image();
+      img.onload=function(){
+        var c=document.createElement('canvas');c.width=w;c.height=h;
+        c.getContext('2d').drawImage(img,0,0);
+        window.parent.postMessage({type:'INLINE_EDIT_SCREENSHOT_RESULT',dataUrl:c.toDataURL('image/png'),scrollX:scrollX,scrollY:scrollY},'*');
+      };
+      img.onerror=function(){
+        window.parent.postMessage({type:'INLINE_EDIT_SCREENSHOT_RESULT',dataUrl:null,scrollX:scrollX,scrollY:scrollY},'*');
+      };
+      img.src=svgUrl;
+    }catch(err){
+      window.parent.postMessage({type:'INLINE_EDIT_SCREENSHOT_RESULT',dataUrl:null,scrollX:scrollX,scrollY:scrollY},'*');
+    }
+  });
+})();
+</script></body>
+</html>
