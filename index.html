@@ -469,64 +469,14 @@ function clampToBounds() {
   if (hit) showBoundaryToast();
 }
 
-// ---------- navigation mode: blue path ribbon + HUD ----------
-// A glowing blue path on the road ahead of the character, draped over
-// the ground, plus a HUD with speed / heading / area. The ribbon's
-// ground raycasts go through the prefiltered targets in
-// buildRaycastTargets, so it no longer stutters the way the unfiltered
-// version did.
+// ---------- navigation mode: HUD ----------
+// A HUD with speed / heading / area. The blue path ribbon used to be
+// here too, but it was removed: draping it over the ground needed 21
+// raycasts per frame, and even with prefiltered targets the big podium
+// meshes (tens of thousands of faces, bounding spheres covering the
+// whole street) made it cost too much. Pure overhead, so it's gone.
 let navMode = true;
 let nightMode = false;
-
-// ribbon: 20 segments, 40m long, 2.5m wide, fading out with distance
-const RIBBON_SEGMENTS = 20, RIBBON_LENGTH = 40, RIBBON_WIDTH = 2.5;
-const ribbonGeo = new THREE.BufferGeometry();
-{
-  const verts = new Float32Array((RIBBON_SEGMENTS + 1) * 2 * 3);
-  const colors = new Float32Array((RIBBON_SEGMENTS + 1) * 2 * 3);
-  const idx = [];
-  for (let i = 0; i < RIBBON_SEGMENTS; i++) {
-    const a = i * 2, b = i * 2 + 1, c = i * 2 + 2, d = i * 2 + 3;
-    idx.push(a, b, c, b, d, c);
-  }
-  for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
-    // fade from bright blue (near) to black (far); additive blending makes
-    // black invisible, so the ribbon dissolves into the road ahead
-    const f = 1 - i / RIBBON_SEGMENTS;
-    const r = 0.15 * f, g = 0.45 * f, b = 1.0 * f;
-    colors.set([r, g, b, r, g, b], i * 6);
-  }
-  ribbonGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3).setUsage(THREE.DynamicDrawUsage));
-  ribbonGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  ribbonGeo.setIndex(idx);
-}
-const ribbon = new THREE.Mesh(ribbonGeo, new THREE.MeshBasicMaterial({
-  vertexColors: true, transparent: true, blending: THREE.AdditiveBlending,
-  depthWrite: false, side: THREE.DoubleSide
-}));
-ribbon.renderOrder = 5;
-ribbon.frustumCulled = false;
-scene.add(ribbon);
-
-const _rFwd = new THREE.Vector3(), _rRight = new THREE.Vector3(), _rPos = new THREE.Vector3();
-function updateRibbon() {
-  if (!navMode || mode !== 'walk' || !model) { ribbon.visible = false; return; }
-  ribbon.visible = true;
-  _rFwd.set(Math.sin(charYaw), 0, Math.cos(charYaw));
-  _rRight.set(-_rFwd.z, 0, _rFwd.x);
-  const pos = ribbonGeo.attributes.position.array;
-  for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
-    const t = (i / RIBBON_SEGMENTS) * RIBBON_LENGTH;
-    _rPos.copy(charPos).addScaledVector(_rFwd, t);
-    const y = groundHeight(_rPos.x, _rPos.z, charPos.y) + 0.15;
-    const hw = RIBBON_WIDTH / 2;
-    pos.set([
-      _rPos.x - _rRight.x * hw, y, _rPos.z - _rRight.z * hw,
-      _rPos.x + _rRight.x * hw, y, _rPos.z + _rRight.z * hw
-    ], i * 6);
-  }
-  ribbonGeo.attributes.position.needsUpdate = true;
-}
 
 // Nav HUD: speed (from actual movement), compass heading, area name
 const navHud = document.getElementById('nav-hud');
@@ -847,7 +797,6 @@ function animate() {
   else if (model) updateFly(dt);
   else controls.update();
   updateShadowFocus();
-  updateRibbon();
   updateNavHud(dt);
   renderer.render(scene, camera);
 
