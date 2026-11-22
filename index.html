@@ -921,6 +921,9 @@ if (modelParam) {
   }).catch(() => setStatus('尚未載入模型，請選擇 full_tst_tile.glb'));
 }
 
+// rigged character (loads in parallel; the procedural one is the fallback)
+loadBryce();
+
 // ---------- file picker + drag & drop ----------
 document.getElementById('pick').addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {
@@ -1118,7 +1121,15 @@ const MOVES = {
 };
 let action = null; // { name, t0 }
 function startAction(name) {
-  if (mode !== 'walk' || flying || action) return;
+  if (mode !== 'walk' || flying) return;
+  // rigged character: play the Mixamo clip instead of the procedural pose
+  if (bryce) {
+    if (name === 'punch') playOneShot('Punching');
+    else if (name === 'kick') playOneShot('Kicking');
+    else if (name === 'combo') playOneShot('Punching', () => playOneShot('Punching', () => playOneShot('Kicking')));
+    return;
+  }
+  if (action) return;
   action = { name, t0: clock.elapsedTime };
 }
 function actionPose(now) {
@@ -1148,6 +1159,62 @@ function actionPose(now) {
   return pose;
 }
 
+// ---------- Mixamo character (Bryce, rigged + mocap clips) ----------
+// Replaces the procedural character once loaded; the procedural one
+// stays as a fallback if the file is missing (e.g. before it is pushed
+// to the repo). Clips: Idle/Walking/Running (locomotion), Punching/
+// Kicking (martial arts). Entering Car/Exiting Car/Driving/Sitting/
+// Sitting Idle/Stand Up/Drinking are loaded too, wired in later phases
+// (no car or chairs exist yet).
+let bryce = null; // { group, mixer, clips, loco, oneShot, current }
+function loadBryce() {
+  loader.load('./bryce_animated.glb', (g) => {
+    const group = g.scene;
+    group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    const mixer = new THREE.AnimationMixer(group);
+    const clips = {};
+    for (const c of g.animations) clips[c.name] = c;
+    bryce = { group, mixer, clips, loco: null, oneShot: null, current: null };
+    scene.add(group);
+    charGroup.visible = false; // procedural character stands down
+    playLoco('Idle');
+    console.log('Bryce loaded, clips:', Object.keys(clips).join(', '));
+  }, undefined, () => {
+    console.warn('bryce_animated.glb not found, using procedural character');
+  });
+}
+function bryceFadeTo(action, dur) {
+  if (bryce.current === action) return;
+  if (bryce.current) bryce.current.crossFadeTo(action, dur, false);
+  action.play();
+  bryce.current = action;
+}
+function playLoco(name) {
+  if (!bryce || !bryce.clips[name] || bryce.oneShot) return;
+  const next = bryce.mixer.clipAction(bryce.clips[name]);
+  next.setLoop(THREE.LoopRepeat);
+  bryceFadeTo(next, 0.25);
+  bryce.loco = next;
+}
+function playOneShot(name, onDone) {
+  if (!bryce || !bryce.clips[name] || bryce.oneShot) return false;
+  const a = bryce.mixer.clipAction(bryce.clips[name]);
+  a.reset();
+  a.setLoop(THREE.LoopOnce);
+  a.clampWhenFinished = true;
+  bryceFadeTo(a, 0.15);
+  bryce.oneShot = a;
+  const done = (e) => {
+    if (e.action !== a) return;
+    bryce.mixer.removeEventListener('finished', done);
+    bryce.oneShot = null;
+    if (onDone) onDone();
+    else if (bryce.loco) bryceFadeTo(bryce.loco, 0.2);
+  };
+  bryce.mixer.addEventListener('finished', done);
+  return true;
+}
+
 function updateWalk(dt) {
   // movement relative to the camera's view direction
   const fwd = new THREE.Vector3(charPos.x - camera.position.x, 0, charPos.z - camera.position.z);
@@ -1167,7 +1234,7 @@ function updateWalk(dt) {
   moving = move.lengthSq() > 0;
   // martial arts: plant the feet while a move is playing
   const pose = actionPose(clock.elapsedTime);
-  if (pose) { move.set(0, 0, 0); moving = false; }
+  if (pose || (bryce && bryce.oneShot)) { move.set(0, 0, 0); moving = false; }
   const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
   const wantFly = keys['Space'] || touchFlyUp;
   const wantDown = keys['ControlLeft'] || keys['ControlRight'] || touchFlyDown;
@@ -1206,6 +1273,12 @@ function updateWalk(dt) {
   }
   charGroup.position.copy(charPos);
   charGroup.rotation.y = charYaw;
+  // rigged character: same position/yaw, locomotion clip by state
+  if (bryce) {
+    bryce.group.position.copy(charPos);
+    bryce.group.rotation.y = charYaw;
+    playLoco(flying ? 'Idle' : (!moving ? 'Idle' : (running ? 'Running' : 'Walking')));
+  }
   // legs swing when running on the ground; dangle + lean forward when flying
   const swing = (moving && !flying) ? Math.sin(swingPhase) * 0.7 : 0;
   legL.rotation.x = flying ? 0.4 : swing;
@@ -1257,6 +1330,7 @@ function animate() {
   else if (model) updateFly(dt);
   else controls.update();
   updateFerry(dt, clock.elapsedTime);
+  if (bryce && bryce.mixer) bryce.mixer.update(dt);
   updateShadowFocus();
   updateNavHud(dt);
   renderer.render(scene, camera);
