@@ -1,4 +1,4 @@
 # ProjectGO
 In progress
 
-Based Taipei, HK
+Based TPE, HKG
