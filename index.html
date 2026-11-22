@@ -90,7 +90,7 @@
   <p id="meta">尖沙咀 3D · 尚未載入模型</p>
   <p id="stats"></p>
   <div id="bar-wrap"><div id="bar"></div></div>
-  <p id="status">準備就緒</p>
+  <p id="status">正在載入模型…</p>
   <div class="row">
     <button id="pick">選擇 .glb 檔案</button>
     <button id="reset" class="secondary">重置視角</button>
@@ -274,12 +274,182 @@ function addWater(size) {
   // harbour west (-X) of the model
   const w = size.x * 2.5, d = size.z * 3;
   mkPlane(w, d, -size.x / 2 - w / 2 + size.x * 0.2, 0);
-  // two-tile map (taller than wide): the southern tile is half harbour,
-  // so add a south plane too — land pokes through it where the peninsula
-  // tip exists, since the ground there sits above y=1.5
-  if (size.z > size.x * 1.2) {
-    mkPlane(size.x * 1.6, size.z * 0.65, 0, size.z * 0.425);
+  // stacked tiles (map taller than one 600m tile): the southern tile
+  // is half harbour, so add a south plane too — land pokes through it
+  // where the peninsula tip exists, since the ground there sits above y=1.5
+  if (size.z > 900) {
+    // wider + further south than the map edge so the harbour reads as
+    // open water from the pier, and far enough to run under the
+    // procedural Hong Kong Island skyline (~1300-1800m past the south
+    // edge) — still one quad: zero extra draw calls
+    mkPlane(size.x * 3.0, size.z * 4.0, 0, size.z * 2.0);
   }
+}
+
+// ---------- procedural outer city ----------
+// Outside the real map there is no data, so the surroundings are faked:
+// seeded-random box towers with canvas-drawn window textures — north +
+// east bands (Kowloon continues there) and a distant skyline across the
+// harbour to the south (Hong Kong Island towers behind the real Central
+// waterfront in the 9A tile). One InstancedMesh per facade variant, so a
+// few hundred buildings cost a couple of draw calls. These meshes are
+// never added to the raycast targets or the heightfield: pure scenery.
+let outerCityGroup = null;
+let outerCityWinMats = [];
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function makeWindowTextures(facade, litRatio, rng) {
+  // one 12x12m tile holding a 4x4 window grid; the same lit windows are
+  // drawn into both canvases so the emissive map lines up with the facade
+  const S = 128, N = 4, cell = S / N;
+  const cMap = document.createElement('canvas'); cMap.width = cMap.height = S;
+  const cEmi = document.createElement('canvas'); cEmi.width = cEmi.height = S;
+  const m = cMap.getContext('2d'), e = cEmi.getContext('2d');
+  m.fillStyle = facade; m.fillRect(0, 0, S, S);
+  e.fillStyle = '#000'; e.fillRect(0, 0, S, S);
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const x = i * cell + cell * 0.22, y = j * cell + cell * 0.22;
+    const w = cell * 0.56, h = cell * 0.56;
+    const lit = rng() < litRatio;
+    m.fillStyle = lit ? '#ffd489' : '#1c2733';
+    m.fillRect(x, y, w, h);
+    if (lit) { e.fillStyle = '#ffc37a'; e.fillRect(x, y, w, h); }
+  }
+  const map = new THREE.CanvasTexture(cMap);
+  const emissiveMap = new THREE.CanvasTexture(cEmi);
+  for (const t of [map, emissiveMap]) {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  }
+  return { map, emissiveMap };
+}
+
+function buildOuterCity() {
+  if (outerCityGroup) {
+    scene.remove(outerCityGroup);
+    outerCityGroup.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const mt of mats) {
+        if (!mt) continue;
+        if (mt.map) mt.map.dispose();
+        if (mt.emissiveMap) mt.emissiveMap.dispose();
+        mt.dispose();
+      }
+    });
+    outerCityGroup = null;
+    outerCityWinMats = [];
+  }
+  if (!modelSize) return;
+  const sx = modelSize.x, sz = modelSize.z;
+  const rng = mulberry32(20261122);
+  outerCityGroup = new THREE.Group();
+
+  // window materials (2 facade variants). The vertex shader scales the
+  // UVs by the instance size so every building gets ~3m windows instead
+  // of one stretched texture, whatever its height.
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x2a2d31, roughness: 0.95 });
+  const winMats = [];
+  for (const [facade, lit] of [['#5a6470', 0.3], ['#6b6257', 0.22]]) {
+    const { map, emissiveMap } = makeWindowTextures(facade, lit, rng);
+    const wm = new THREE.MeshStandardMaterial({
+      map, emissiveMap, emissive: 0xffc37a,
+      emissiveIntensity: nightMode ? 1.4 : 0.15, roughness: 0.85
+    });
+    wm.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <uv_vertex>',
+        `#include <uv_vertex>
+        {
+          vec3 instScale = vec3(instanceMatrix[0][0], instanceMatrix[1][1], instanceMatrix[2][2]);
+          float faceW = max(instScale.x, instScale.z);
+          vMapUv = vec2(vMapUv.x * faceW / 12.0, vMapUv.y * instScale.y / 12.0);
+          #ifdef USE_EMISSIVEMAP
+          vEmissiveMapUv = vMapUv;
+          #endif
+        }`
+      );
+    };
+    winMats.push(wm);
+  }
+  outerCityWinMats = winMats;
+
+  // collect placements: [x, z, w, h, d, variant]
+  const spots = [];
+  const band = (x0, x1, z0, z1, hMin, hMax) => {
+    for (let x = x0; x < x1; x += 70) for (let z = z0; z < z1; z += 70) {
+      if (rng() < 0.15) continue; // gap: street / park
+      const w = 22 + rng() * 26, d = 22 + rng() * 26;
+      let h = hMin + rng() * (hMax - hMin);
+      if (rng() < 0.1) h = hMax + rng() * 50; // occasional tower
+      spots.push([x + (rng() - 0.5) * 12, z + (rng() - 0.5) * 12, w, h, d, rng() < 0.5 ? 0 : 1]);
+    }
+  };
+  // north band (Kowloon) + east band (Kowloon); west/south is harbour
+  band(-sx / 2 - 150, sx / 2 + 150, -sz / 2 - 450, -sz / 2 - 40, 25, 90);
+  band(sx / 2 + 40, sx / 2 + 450, -sz / 2, sz / 2, 25, 90);
+  // south skyline: Hong Kong Island towers behind the real waterfront
+  for (let row = 0; row < 2; row++) {
+    const zRow = sz / 2 + (row === 0 ? 1300 : 1800);
+    for (let x = -sx / 2 - 800; x < sx / 2 + 800; x += 90 + rng() * 50) {
+      const h = row === 0 ? 100 + rng() * 100 : 180 + rng() * 140;
+      const w = 40 + rng() * 30, d = 40 + rng() * 30;
+      spots.push([x, zRow + (rng() - 0.5) * 120, w, h, d, rng() < 0.5 ? 0 : 1]);
+    }
+  }
+
+  const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+  boxGeo.translate(0, 0.5, 0); // instance origin at the base
+  const dummy = new THREE.Object3D();
+  const tint = new THREE.Color();
+  for (let v = 0; v < 2; v++) {
+    const list = spots.filter((s) => s[5] === v);
+    if (!list.length) continue;
+    const mesh = new THREE.InstancedMesh(
+      boxGeo, [winMats[v], winMats[v], roofMat, roofMat, winMats[v], winMats[v]], list.length);
+    list.forEach((s, i) => {
+      dummy.position.set(s[0], 0, s[1]);
+      dummy.scale.set(s[2], s[3], s[4]);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+      const t = 0.85 + rng() * 0.3;
+      mesh.setColorAt(i, tint.setRGB(t, t, t));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    outerCityGroup.add(mesh);
+  }
+
+  // ground under the two bands (dark asphalt; the real terrain ends at
+  // the map edge) + a low landmass strip under the south skyline
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x35383c, roughness: 1 });
+  const mkGround = (w, d, x, z) => {
+    const g = new THREE.Mesh(new THREE.PlaneGeometry(w, d), groundMat);
+    g.rotation.x = -Math.PI / 2;
+    g.position.set(x, 0, z);
+    outerCityGroup.add(g);
+  };
+  mkGround(sx + 300, 2000, 0, -sz / 2 - 1000);
+  mkGround(2000, sz, sx / 2 + 1000, 0);
+  const strip = new THREE.Mesh(
+    new THREE.BoxGeometry(sx + 1600, 8, 600),
+    new THREE.MeshStandardMaterial({ color: 0x2f3a33, roughness: 1 }));
+  strip.position.set(0, 4, sz / 2 + 1550);
+  outerCityGroup.add(strip);
+
+  scene.add(outerCityGroup);
 }
 
 // ---------- character (built from primitives, ~2m tall) ----------
@@ -576,6 +746,8 @@ function setNightMode(on) {
     sun.color.set(0xfff2dd);
     if (fogWallMat) fogWallMat.color.set(0xffffff);
   }
+  // procedural outer city: lit windows glow at night
+  for (const m of outerCityWinMats) m.emissiveIntensity = on ? 1.4 : 0.15;
 }
 document.getElementById('nightToggle').addEventListener('click', () => setNightMode(!nightMode));
 
@@ -654,6 +826,7 @@ function onLoaded(gltf, name) {
   buildGround();
   buildRaycastTargets();
   buildFogWalls();
+  buildOuterCity();
   spawnCharacter();
   setMode(mode); // apply the current mode to the fresh model
 }
