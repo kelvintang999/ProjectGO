@@ -98,6 +98,9 @@
     <button id="modeToggle" class="secondary">模式：飛行</button>
     <button id="navToggle" class="secondary">導航模式：開</button>
     <button id="nightToggle" class="secondary">夜間：關</button>
+    <button id="punchBtn" class="secondary">拳 (J)</button>
+    <button id="kickBtn" class="secondary">腿 (K)</button>
+    <button id="comboBtn" class="secondary">連招 (L)</button>
   </div>
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
@@ -481,7 +484,7 @@ function buildOuterCity() {
 
 // ---------- character (built from primitives, ~2m tall) ----------
 const charGroup = new THREE.Group();
-let legL, legR, charBody;
+let legL, legR, charBody, armL, armR;
 let charPos = new THREE.Vector3(0, 0, 0);
 let charYaw = 0;
 let swingPhase = 0;
@@ -506,6 +509,16 @@ function createCharacter() {
   legL.add(meshL); legR.add(meshR);
   legL.position.set(-0.18, 0.85, 0);
   legR.position.set(0.18, 0.85, 0);
+  // arms pivot at the shoulder (children of charBody so they bob with it)
+  const armGeo = new THREE.CapsuleGeometry(0.11, 0.45, 4, 8);
+  armL = new THREE.Group(); armR = new THREE.Group();
+  const armMeshL = new THREE.Mesh(armGeo, mat(0xff6b35));
+  const armMeshR = new THREE.Mesh(armGeo, mat(0xff6b35));
+  armMeshL.position.y = -0.32; armMeshR.position.y = -0.32;
+  armL.add(armMeshL); armR.add(armMeshR);
+  armL.position.set(-0.42, 1.5, 0);
+  armR.position.set(0.42, 1.5, 0);
+  charBody.add(armL, armR);
   charGroup.add(charBody, legL, legR);
   charGroup.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
   scene.add(charGroup);
@@ -679,7 +692,13 @@ function buildFogWalls() {
   const cx = (bounds.minX + bounds.maxX) / 2, cz = (bounds.minZ + bounds.maxZ) / 2;
   const sx = bounds.maxX - bounds.minX, sz = bounds.maxZ - bounds.minZ;
   mkWall(sx, cx, bounds.minZ, 0);
-  mkWall(sx, cx, bounds.maxZ, 0);
+  // south wall: two segments with a 60m channel for the Star Ferry
+  // (it sails out through the gap; the player is still blocked by
+  // clampToBounds — the walls are visual only)
+  const ferryX = 270, channel = 60;
+  const gapL = ferryX - channel / 2, gapR = ferryX + channel / 2;
+  mkWall(gapL - bounds.minX, (bounds.minX + gapL) / 2, bounds.maxZ, 0);
+  mkWall(bounds.maxX - gapR, (gapR + bounds.maxX) / 2, bounds.maxZ, 0);
   mkWall(sz, bounds.minX, cz, Math.PI / 2);
   mkWall(sz, bounds.maxX, cz, Math.PI / 2);
 }
@@ -777,6 +796,9 @@ function setNightMode(on) {
   for (const m of outerCityWinMats) m.emissiveIntensity = on ? 1.4 : 0.15;
 }
 document.getElementById('nightToggle').addEventListener('click', () => setNightMode(!nightMode));
+document.getElementById('punchBtn').addEventListener('click', () => startAction('punch'));
+document.getElementById('kickBtn').addEventListener('click', () => startAction('kick'));
+document.getElementById('comboBtn').addEventListener('click', () => startAction('combo'));
 
 function spawnCharacter() {
   const sx = SPAWN_RAW.x - modelCenter.x;
@@ -854,6 +876,7 @@ function onLoaded(gltf, name) {
   buildRaycastTargets();
   buildFogWalls();
   buildOuterCity();
+  createFerry();
   spawnCharacter();
   setMode(mode); // apply the current mode to the fresh model
 }
@@ -938,11 +961,95 @@ try {
   if (ext) gpuName = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || gpuName;
 } catch (e) { /* ignore */ }
 
+// ---------- Star Ferry (procedural, sails TST <-> Central) ----------
+// The classic green-hulled double-decker, built from primitives. It
+// runs the real Star Ferry route: TST pier (by the spawn) straight
+// south across the harbour to the Central waterfront (just north of
+// the procedural skyline strip), dwells 5s, turns, and comes back.
+// Speed is ~15 m/s — a real crossing takes ~8 min, too slow to watch.
+// Berth offsets are tuned for the 2-tile TST map (sz = 1200).
+let ferry = null;
+
+function createFerry() {
+  if (ferry) scene.remove(ferry.group);
+  const g = new THREE.Group();
+  const mat = (c, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
+  const green = mat(0x1f6b3a), white = mat(0xe8e8e8), dark = mat(0x1c2733, 0.3), black = mat(0x1a1a1a);
+  // hull: extruded plan (rectangle + pointed bow), 32m long, 8m wide.
+  // The shape's -y is the bow so that after the -90° X rotation the
+  // bow points +z (forward) and the extrusion becomes the height.
+  const s = new THREE.Shape();
+  s.moveTo(-4, 15); s.lineTo(4, 15); s.lineTo(4, -10); s.lineTo(0, -17); s.lineTo(-4, -10);
+  s.closePath();
+  const hull = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 3, bevelEnabled: false }), green);
+  hull.rotation.x = -Math.PI / 2;
+  g.add(hull);
+  const box = (w, h, d, m, x, y, z) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z); g.add(b); return b;
+  };
+  box(7.4, 2.2, 26, white, 0, 4.1, -1);      // main deck
+  box(7, 2, 20, white, 0, 6.2, -2);          // upper deck
+  box(4, 1.8, 3.5, white, 0, 8.1, 6);        // wheelhouse
+  box(0.1, 0.9, 24, dark, -3.75, 4.1, -1);   // main-deck windows, port
+  box(0.1, 0.9, 24, dark, 3.75, 4.1, -1);    // main-deck windows, starboard
+  box(0.1, 0.9, 18, dark, -3.55, 6.2, -2);   // upper-deck windows, port
+  box(0.1, 0.9, 18, dark, 3.55, 6.2, -2);    // upper-deck windows, starboard
+  box(3.6, 0.9, 0.1, dark, 0, 8.3, 7.8);     // wheelhouse front windows
+  const funnel = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 3, 12), black);
+  funnel.position.set(0, 8.7, -6); g.add(funnel);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3, 6), black);
+  mast.position.set(0, 10.5, 6); g.add(mast);
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  const sz = modelSize.z;
+  ferry = {
+    group: g, x: 270, zTST: sz / 2 - 280, zCEN: sz / 2 + 660,
+    s: 0, dir: 1, dwell: 3, yaw: 0
+  };
+  g.position.set(270, 1.35, ferry.zTST);
+  scene.add(g);
+}
+
+function updateFerry(dt, t) {
+  if (!ferry) return;
+  const f = ferry;
+  const routeLen = f.zCEN - f.zTST;
+  if (f.dwell > 0) {
+    f.dwell -= dt;
+    // turn around smoothly during the dwell
+    const targetYaw = f.dir > 0 ? 0 : Math.PI;
+    let d = targetYaw - f.yaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    f.yaw += d * Math.min(1, dt * 2);
+    if (f.dwell <= 0) f.yaw = targetYaw;
+  } else {
+    // ease speed near the piers (slow within 150m of either end)
+    const z = f.zTST + f.s * routeLen;
+    const distEnd = f.dir > 0 ? f.zCEN - z : z - f.zTST;
+    const speed = 15 * Math.min(1, Math.max(0.15, distEnd / 150));
+    f.s += f.dir * speed * dt / routeLen;
+    if (f.s >= 1) { f.s = 1; f.dir = -1; f.dwell = 5; }
+    if (f.s <= 0) { f.s = 0; f.dir = 1; f.dwell = 5; }
+  }
+  const z = f.zTST + f.s * routeLen;
+  f.group.position.set(f.x, 1.35 + Math.sin(t * 0.7) * 0.1, z);
+  f.group.rotation.y = f.yaw;
+  f.group.rotation.z = Math.sin(t * 0.5) * 0.01;
+  f.group.rotation.x = Math.sin(t * 0.6 + 1) * 0.008;
+}
+
 // ---------- input + animation ----------
 const keys = {};
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') e.preventDefault(); // Space = fly up (also avoids triggering focused buttons)
   keys[e.code] = true;
+  // martial arts (J/K/L) — fire once per press, not on hold
+  if (!e.repeat) {
+    if (e.code === 'KeyJ') startAction('punch');
+    else if (e.code === 'KeyK') startAction('kick');
+    else if (e.code === 'KeyL') startAction('combo');
+  }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
@@ -1000,6 +1107,47 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 let flying = false;
 
+// ---------- martial arts (procedural moves on the character) ----------
+// The boss wants martial-arts moves as animated models — first try on
+// the little character, driven by code (no animation files). Each move
+// is a timeline of limb poses; the body plants its feet while striking.
+const MOVES = {
+  punch: { dur: 0.5 }, // right straight punch
+  kick: { dur: 0.7 },  // right front kick
+  combo: { dur: 1.8 }  // left punch, right punch, right kick
+};
+let action = null; // { name, t0 }
+function startAction(name) {
+  if (mode !== 'walk' || flying || action) return;
+  action = { name, t0: clock.elapsedTime };
+}
+function actionPose(now) {
+  // returns limb/body overrides for the active move, or null
+  if (!action) return null;
+  const p = (now - action.t0) / MOVES[action.name].dur;
+  if (p >= 1) { action = null; return null; }
+  const bump = (a, b) => { // smooth 0→1→0 over the phase [a, b]
+    if (p < a || p > b) return 0;
+    return Math.sin((p - a) / (b - a) * Math.PI);
+  };
+  const pose = { armL: 0, armR: 0, legL: 0, legR: 0, bodyX: 0, bodyY: 0 };
+  if (action.name === 'punch') {
+    const b = bump(0, 1);
+    pose.armR = -1.4 * b; pose.bodyY = 0.35 * b; pose.bodyX = 0.08 * b;
+  } else if (action.name === 'kick') {
+    const b = bump(0, 1);
+    pose.legR = -1.2 * b; pose.bodyX = -0.18 * b;
+    pose.armL = -0.9 * b; pose.armR = -0.9 * b; // guard up for balance
+  } else { // combo: left punch, right punch, right kick
+    pose.armL = -1.4 * bump(0, 0.3); pose.bodyY = 0.35 * bump(0, 0.3);
+    pose.armR = -1.4 * bump(0.3, 0.6); pose.bodyY += -0.35 * bump(0.3, 0.6);
+    const kb = bump(0.62, 0.95);
+    pose.legR = -1.2 * kb; pose.bodyX = -0.18 * kb;
+    pose.armL = pose.armL || -0.9 * kb; pose.armR = pose.armR || -0.9 * kb;
+  }
+  return pose;
+}
+
 function updateWalk(dt) {
   // movement relative to the camera's view direction
   const fwd = new THREE.Vector3(charPos.x - camera.position.x, 0, charPos.z - camera.position.z);
@@ -1017,6 +1165,9 @@ function updateWalk(dt) {
     move.addScaledVector(right, joy.x);
   }
   moving = move.lengthSq() > 0;
+  // martial arts: plant the feet while a move is playing
+  const pose = actionPose(clock.elapsedTime);
+  if (pose) { move.set(0, 0, 0); moving = false; }
   const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
   const wantFly = keys['Space'] || touchFlyUp;
   const wantDown = keys['ControlLeft'] || keys['ControlRight'] || touchFlyDown;
@@ -1059,8 +1210,20 @@ function updateWalk(dt) {
   const swing = (moving && !flying) ? Math.sin(swingPhase) * 0.7 : 0;
   legL.rotation.x = flying ? 0.4 : swing;
   legR.rotation.x = flying ? 0.4 : -swing;
+  armL.rotation.x = flying ? 0.2 : -swing * 0.6; // arms swing opposite the legs
+  armR.rotation.x = flying ? 0.2 : swing * 0.6;
   charBody.position.y = (moving && !flying) ? Math.abs(Math.sin(swingPhase)) * 0.08 : 0;
   charBody.rotation.x = flying ? 0.3 : 0;
+  charBody.rotation.y = 0;
+  // martial arts pose overrides the walk pose while a move is playing
+  if (pose) {
+    if (pose.armL) armL.rotation.x = pose.armL;
+    if (pose.armR) armR.rotation.x = pose.armR;
+    if (pose.legL) legL.rotation.x = pose.legL;
+    if (pose.legR) legR.rotation.x = pose.legR;
+    charBody.rotation.x = pose.bodyX;
+    charBody.rotation.y = pose.bodyY;
+  }
   updateWalkCamera();
 }
 
@@ -1093,6 +1256,7 @@ function animate() {
   if (mode === 'walk' && model) updateWalk(dt);
   else if (model) updateFly(dt);
   else controls.update();
+  updateFerry(dt, clock.elapsedTime);
   updateShadowFocus();
   updateNavHud(dt);
   renderer.render(scene, camera);
