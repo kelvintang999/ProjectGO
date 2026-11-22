@@ -877,7 +877,7 @@ window.addEventListener('pointermove', (e) => {
 window.addEventListener('pointerup', () => { dragging = false; });
 renderer.domElement.addEventListener('wheel', (e) => {
   if (mode !== 'walk') return;
-  camDist = THREE.MathUtils.clamp(camDist + e.deltaY * 0.01, 6, 40);
+  camDist = THREE.MathUtils.clamp(camDist + e.deltaY * 0.01, 2, 40);
 }, { passive: true });
 
 function updateWalkCamera() {
