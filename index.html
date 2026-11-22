@@ -133,7 +133,7 @@ const hemi = new THREE.HemisphereLight(0xbfd9ff, 0x8a7a5a, 0.9);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff2dd, 2.0);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(1024, 1024);
 sun.shadow.bias = -0.0005;
 scene.add(sun);
 scene.add(sun.target);
@@ -183,14 +183,13 @@ function frameModel() {
   controls.target.set(0, size.y * 0.3, 0);
   controls.update();
 
-  // sun + shadows fitted to the model
-  sun.position.set(dist * 0.8, dist * 1.1, dist * 0.5);
-  sun.target.position.set(0, 0, 0);
+  // sun + shadows: a tight box that follows the character (or the orbit
+  // target in fly mode) — covering the whole 1200m map in one shadow map
+  // is both blurry and slow. updateShadowFocus() re-aims it every frame.
   const sc = sun.shadow.camera;
-  sc.left = -maxDim; sc.right = maxDim;
-  sc.top = maxDim; sc.bottom = -maxDim;
-  sc.near = 1; sc.far = maxDim * 4;
+  sc.near = 1; sc.far = 1200;
   sc.updateProjectionMatrix();
+  updateShadowFocus();
 
   // fog + water (harbour, west of the model)
   scene.fog = new THREE.Fog(0x87b5d6, maxDim * 1.6, maxDim * 4.5);
@@ -199,6 +198,22 @@ function frameModel() {
   metaEl.textContent = '已載入：' + (model.userData.name || '模型');
   setStatus('載入完成，拖曳旋轉、WASD 移動');
   barWrap.style.display = 'none';
+}
+
+const SUN_DIR = new THREE.Vector3(0.8, 1.1, 0.5).normalize();
+function updateShadowFocus() {
+  if (!model) return;
+  const focus = mode === 'walk' ? charPos : controls.target;
+  const half = mode === 'walk' ? 120 : 400;
+  sun.position.copy(focus).addScaledVector(SUN_DIR, 500);
+  sun.target.position.copy(focus);
+  sun.target.updateMatrixWorld();
+  const sc = sun.shadow.camera;
+  if (sc.left !== -half) {
+    sc.left = -half; sc.right = half;
+    sc.top = half; sc.bottom = -half;
+    sc.updateProjectionMatrix();
+  }
 }
 
 let waterMeshes = [];
@@ -341,15 +356,39 @@ function terrainHeight(x, z) {
   return (h00 * (1 - tx) + h10 * tx) * (1 - tz) + (h01 * (1 - tx) + h11 * tx) * tz;
 }
 
+// Raycast targets, prefiltered per query: raycasting ~500 meshes every
+// frame (21x for the ribbon alone) is what made the demo stutter — the
+// two road-network meshes have ~800k triangles between them and their
+// bounding spheres cover the whole map, so every ray tested them all.
+// Fix: (1) skip monster meshes (>50k tris — ground-level roads, the
+// heightfield already covers them), (2) test only meshes whose XZ bounds
+// contain the query point.
+let raycastTargets = [];
+function buildRaycastTargets() {
+  raycastTargets = [];
+  const box = new THREE.Box3();
+  for (const m of buildingMeshes) {
+    const geo = m.geometry;
+    const tris = (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
+    if (tris > 50000) continue;
+    box.setFromObject(m);
+    raycastTargets.push({ mesh: m,
+      minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z });
+  }
+}
+
 function groundHeight(x, z, refY) {
   let h = terrainHeight(x, z);
-  // highest building/road hit near/below the character: lets the character
+  // highest building hit near/below the character: lets the character
   // step onto podiums, but not pop up onto footbridges overhead.
   downRay.set(new THREE.Vector3(x, refY + 50, z), new THREE.Vector3(0, -1, 0));
   downRay.far = 60;
-  const hits = downRay.intersectObjects(buildingMeshes, false);
-  for (const hit of hits) {
-    if (hit.point.y <= refY + 2.5) { h = Math.max(h, hit.point.y); break; }
+  for (const t of raycastTargets) {
+    if (x < t.minX || x > t.maxX || z < t.minZ || z > t.maxZ) continue;
+    const hits = downRay.intersectObject(t.mesh, false);
+    for (const hit of hits) {
+      if (hit.point.y <= refY + 2.5) { h = Math.max(h, hit.point.y); break; }
+    }
   }
   return h;
 }
@@ -620,6 +659,7 @@ function onLoaded(gltf, name) {
   recenterDone = false;
   frameModel();
   buildGround();
+  buildRaycastTargets();
   buildFogWalls();
   spawnCharacter();
   setMode(mode); // apply the current mode to the fresh model
@@ -804,6 +844,7 @@ function animate() {
   if (mode === 'walk' && model) updateWalk(dt);
   else if (model) updateFly(dt);
   else controls.update();
+  updateShadowFocus();
   updateRibbon();
   updateTeslaHud(dt);
   renderer.render(scene, camera);
