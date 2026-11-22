@@ -2,12 +2,12 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>尖沙咀 Demo — 香港 3D</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1420; font-family: system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif; }
   #app { position: fixed; inset: 0; }
-  canvas { display: block; }
+  canvas { display: block; touch-action: none; }
   #hud {
     position: fixed; top: 12px; left: 12px; z-index: 10; color: #e8eef7;
     background: rgba(10, 16, 28, 0.72); border: 1px solid rgba(255,255,255,0.14);
@@ -50,6 +50,35 @@
   #nav-speed { font-size: 56px; font-weight: 200; line-height: 1; letter-spacing: -1px; }
   #nav-unit { font-size: 13px; color: #cbd5e1; margin-top: 2px; }
   #nav-nav { font-size: 14px; color: #e2e8f0; margin-top: 8px; }
+  .touch-help { display: none; }
+  #touch-ui { display: none; position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+  #joy {
+    position: absolute; left: 20px; bottom: 20px; width: 120px; height: 120px;
+    border-radius: 50%; background: rgba(10, 16, 28, 0.45);
+    border: 1px solid rgba(255,255,255,0.25); pointer-events: auto; touch-action: none;
+  }
+  #joy-knob {
+    position: absolute; left: 50%; top: 50%; width: 48px; height: 48px;
+    border-radius: 50%; background: rgba(255,255,255,0.55);
+    transform: translate(-50%, -50%);
+  }
+  #touch-btns {
+    position: absolute; right: 20px; bottom: 20px; display: flex; gap: 10px;
+    pointer-events: auto;
+  }
+  .touch-btn {
+    width: 64px; height: 64px; border-radius: 50%; padding: 0; font-size: 16px;
+    background: rgba(51, 65, 85, 0.8); border: 1px solid rgba(255,255,255,0.25);
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  .touch-btn.on { background: #2563eb; }
+  @media (pointer: coarse) {
+    #touch-ui { display: block; }
+    .kb-help { display: none; }
+    .touch-help { display: inline; }
+    #help { bottom: 210px; white-space: normal; max-width: 92vw; text-align: center; }
+    #toast { bottom: 160px; }
+  }
   #err { color: #fca5a5; }
 </style>
 </head>
@@ -61,24 +90,32 @@
   <p id="meta">尖沙咀 3D · 尚未載入模型</p>
   <p id="stats"></p>
   <div id="bar-wrap"><div id="bar"></div></div>
-  <p id="status">準備就緒</p>
+  <p id="status">正在載入模型…</p>
   <div class="row">
     <button id="pick">選擇 .glb 檔案</button>
     <button id="reset" class="secondary">重置視角</button>
     <button id="shadowToggle" class="secondary">陰影：開</button>
-    <button id="modeToggle" class="secondary">模式：步行</button>
+    <button id="modeToggle" class="secondary">模式：飛行</button>
     <button id="navToggle" class="secondary">導航模式：開</button>
     <button id="nightToggle" class="secondary">夜間：關</button>
   </div>
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
 
-<div id="help">步行：WASD 移動 · Shift 跑 · 拖曳轉鏡頭 · 滾輪拉遠近 · 按住空白鍵飛行 · Ctrl 下降 — 飛行：WASD 飛 · Q / E 上下</div>
+<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降</span></div>
 <div id="toast"></div>
 <div id="nav-hud">
   <div id="nav-speed">0</div>
   <div id="nav-unit">km/h</div>
   <div id="nav-nav">尖沙咀</div>
+</div>
+<div id="touch-ui">
+  <div id="joy"><div id="joy-knob"></div></div>
+  <div id="touch-btns">
+    <button id="btn-run" class="touch-btn">跑</button>
+    <button id="btn-up" class="touch-btn">升</button>
+    <button id="btn-down" class="touch-btn">降</button>
+  </div>
 </div>
 <div id="drop-hint">放開以載入 .glb</div>
 
@@ -150,7 +187,9 @@ let modelCenter = new THREE.Vector3();
 let recenterDone = false;
 
 // ---------- mode: 'walk' (third-person) or 'fly' (orbit + WASD) ----------
-let mode = 'walk';
+// Default is fly: the page opens on the aerial view; switch to walk
+// to drop the character in.
+let mode = 'fly';
 
 function setStatus(text, isError) {
   statusEl.textContent = text;
@@ -235,12 +274,182 @@ function addWater(size) {
   // harbour west (-X) of the model
   const w = size.x * 2.5, d = size.z * 3;
   mkPlane(w, d, -size.x / 2 - w / 2 + size.x * 0.2, 0);
-  // two-tile map (taller than wide): the southern tile is half harbour,
-  // so add a south plane too — land pokes through it where the peninsula
-  // tip exists, since the ground there sits above y=1.5
-  if (size.z > size.x * 1.2) {
-    mkPlane(size.x * 1.6, size.z * 0.65, 0, size.z * 0.425);
+  // stacked tiles (map taller than one 600m tile): the southern tile
+  // is half harbour, so add a south plane too — land pokes through it
+  // where the peninsula tip exists, since the ground there sits above y=1.5
+  if (size.z > 900) {
+    // wider + further south than the map edge so the harbour reads as
+    // open water from the pier, and far enough to run under the
+    // procedural Hong Kong Island skyline (~1300-1800m past the south
+    // edge) — still one quad: zero extra draw calls
+    mkPlane(size.x * 3.0, size.z * 4.0, 0, size.z * 2.0);
   }
+}
+
+// ---------- procedural outer city ----------
+// Outside the real map there is no data, so the surroundings are faked:
+// seeded-random box towers with canvas-drawn window textures — north +
+// east bands (Kowloon continues there) and a distant skyline across the
+// harbour to the south (Hong Kong Island towers behind the real Central
+// waterfront in the 9A tile). One InstancedMesh per facade variant, so a
+// few hundred buildings cost a couple of draw calls. These meshes are
+// never added to the raycast targets or the heightfield: pure scenery.
+let outerCityGroup = null;
+let outerCityWinMats = [];
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function makeWindowTextures(facade, litRatio, rng) {
+  // one 12x12m tile holding a 4x4 window grid; the same lit windows are
+  // drawn into both canvases so the emissive map lines up with the facade
+  const S = 128, N = 4, cell = S / N;
+  const cMap = document.createElement('canvas'); cMap.width = cMap.height = S;
+  const cEmi = document.createElement('canvas'); cEmi.width = cEmi.height = S;
+  const m = cMap.getContext('2d'), e = cEmi.getContext('2d');
+  m.fillStyle = facade; m.fillRect(0, 0, S, S);
+  e.fillStyle = '#000'; e.fillRect(0, 0, S, S);
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const x = i * cell + cell * 0.22, y = j * cell + cell * 0.22;
+    const w = cell * 0.56, h = cell * 0.56;
+    const lit = rng() < litRatio;
+    m.fillStyle = lit ? '#ffd489' : '#1c2733';
+    m.fillRect(x, y, w, h);
+    if (lit) { e.fillStyle = '#ffc37a'; e.fillRect(x, y, w, h); }
+  }
+  const map = new THREE.CanvasTexture(cMap);
+  const emissiveMap = new THREE.CanvasTexture(cEmi);
+  for (const t of [map, emissiveMap]) {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  }
+  return { map, emissiveMap };
+}
+
+function buildOuterCity() {
+  if (outerCityGroup) {
+    scene.remove(outerCityGroup);
+    outerCityGroup.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const mt of mats) {
+        if (!mt) continue;
+        if (mt.map) mt.map.dispose();
+        if (mt.emissiveMap) mt.emissiveMap.dispose();
+        mt.dispose();
+      }
+    });
+    outerCityGroup = null;
+    outerCityWinMats = [];
+  }
+  if (!modelSize) return;
+  const sx = modelSize.x, sz = modelSize.z;
+  const rng = mulberry32(20261122);
+  outerCityGroup = new THREE.Group();
+
+  // window materials (2 facade variants). The vertex shader scales the
+  // UVs by the instance size so every building gets ~3m windows instead
+  // of one stretched texture, whatever its height.
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x2a2d31, roughness: 0.95 });
+  const winMats = [];
+  for (const [facade, lit] of [['#5a6470', 0.3], ['#6b6257', 0.22]]) {
+    const { map, emissiveMap } = makeWindowTextures(facade, lit, rng);
+    const wm = new THREE.MeshStandardMaterial({
+      map, emissiveMap, emissive: 0xffc37a,
+      emissiveIntensity: nightMode ? 1.4 : 0.15, roughness: 0.85
+    });
+    wm.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <uv_vertex>',
+        `#include <uv_vertex>
+        {
+          vec3 instScale = vec3(instanceMatrix[0][0], instanceMatrix[1][1], instanceMatrix[2][2]);
+          float faceW = max(instScale.x, instScale.z);
+          vMapUv = vec2(vMapUv.x * faceW / 12.0, vMapUv.y * instScale.y / 12.0);
+          #ifdef USE_EMISSIVEMAP
+          vEmissiveMapUv = vMapUv;
+          #endif
+        }`
+      );
+    };
+    winMats.push(wm);
+  }
+  outerCityWinMats = winMats;
+
+  // collect placements: [x, z, w, h, d, variant]
+  const spots = [];
+  const band = (x0, x1, z0, z1, hMin, hMax) => {
+    for (let x = x0; x < x1; x += 70) for (let z = z0; z < z1; z += 70) {
+      if (rng() < 0.15) continue; // gap: street / park
+      const w = 22 + rng() * 26, d = 22 + rng() * 26;
+      let h = hMin + rng() * (hMax - hMin);
+      if (rng() < 0.1) h = hMax + rng() * 50; // occasional tower
+      spots.push([x + (rng() - 0.5) * 12, z + (rng() - 0.5) * 12, w, h, d, rng() < 0.5 ? 0 : 1]);
+    }
+  };
+  // north band (Kowloon) + east band (Kowloon); west/south is harbour
+  band(-sx / 2 - 150, sx / 2 + 150, -sz / 2 - 450, -sz / 2 - 40, 25, 90);
+  band(sx / 2 + 40, sx / 2 + 450, -sz / 2, sz / 2, 25, 90);
+  // south skyline: Hong Kong Island towers behind the real waterfront
+  for (let row = 0; row < 2; row++) {
+    const zRow = sz / 2 + (row === 0 ? 1300 : 1800);
+    for (let x = -sx / 2 - 800; x < sx / 2 + 800; x += 90 + rng() * 50) {
+      const h = row === 0 ? 100 + rng() * 100 : 180 + rng() * 140;
+      const w = 40 + rng() * 30, d = 40 + rng() * 30;
+      spots.push([x, zRow + (rng() - 0.5) * 120, w, h, d, rng() < 0.5 ? 0 : 1]);
+    }
+  }
+
+  const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+  boxGeo.translate(0, 0.5, 0); // instance origin at the base
+  const dummy = new THREE.Object3D();
+  const tint = new THREE.Color();
+  for (let v = 0; v < 2; v++) {
+    const list = spots.filter((s) => s[5] === v);
+    if (!list.length) continue;
+    const mesh = new THREE.InstancedMesh(
+      boxGeo, [winMats[v], winMats[v], roofMat, roofMat, winMats[v], winMats[v]], list.length);
+    list.forEach((s, i) => {
+      dummy.position.set(s[0], 0, s[1]);
+      dummy.scale.set(s[2], s[3], s[4]);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+      const t = 0.85 + rng() * 0.3;
+      mesh.setColorAt(i, tint.setRGB(t, t, t));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    outerCityGroup.add(mesh);
+  }
+
+  // ground under the two bands (dark asphalt; the real terrain ends at
+  // the map edge) + a low landmass strip under the south skyline
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x35383c, roughness: 1 });
+  const mkGround = (w, d, x, z) => {
+    const g = new THREE.Mesh(new THREE.PlaneGeometry(w, d), groundMat);
+    g.rotation.x = -Math.PI / 2;
+    g.position.set(x, 0, z);
+    outerCityGroup.add(g);
+  };
+  mkGround(sx + 300, 2000, 0, -sz / 2 - 1000);
+  mkGround(2000, sz, sx / 2 + 1000, 0);
+  const strip = new THREE.Mesh(
+    new THREE.BoxGeometry(sx + 1600, 8, 600),
+    new THREE.MeshStandardMaterial({ color: 0x2f3a33, roughness: 1 }));
+  strip.position.set(0, 4, sz / 2 + 1550);
+  outerCityGroup.add(strip);
+
+  scene.add(outerCityGroup);
 }
 
 // ---------- character (built from primitives, ~2m tall) ----------
@@ -285,10 +494,12 @@ createCharacter();
 let heightGrid = null;
 let buildingMeshes = [];
 const downRay = new THREE.Raycaster();
-// Canton Road, in scene coords BEFORE recentering (Blender rebase X -266,
-// northing +15 -> scene Z -15). spawnCharacter converts with modelCenter,
-// so the spawn survives the map growing (new tiles shift the centre).
-const SPAWN_RAW = { x: -266, z: -15 };
+// Tsim Sha Tsui Ferry Pier plaza, in scene coords BEFORE recentering
+// (Blender rebase X 220, northing -465 -> scene Z 465). Checked against
+// the 4D tile's building footprints: open ground, 17m+ clear of the
+// nearest buildings, ~100m from the shoreline. spawnCharacter converts
+// with modelCenter, so the spawn survives the map growing.
+const SPAWN_RAW = { x: 220, z: 465 };
 
 function buildGround() {
   model.updateMatrixWorld(true);
@@ -469,64 +680,14 @@ function clampToBounds() {
   if (hit) showBoundaryToast();
 }
 
-// ---------- navigation mode: blue path ribbon + HUD ----------
-// A glowing blue path on the road ahead of the character, draped over
-// the ground, plus a HUD with speed / heading / area. The ribbon's
-// ground raycasts go through the prefiltered targets in
-// buildRaycastTargets, so it no longer stutters the way the unfiltered
-// version did.
+// ---------- navigation mode: HUD ----------
+// A HUD with speed / heading / area. The blue path ribbon used to be
+// here too, but it was removed: draping it over the ground needed 21
+// raycasts per frame, and even with prefiltered targets the big podium
+// meshes (tens of thousands of faces, bounding spheres covering the
+// whole street) made it cost too much. Pure overhead, so it's gone.
 let navMode = true;
 let nightMode = false;
-
-// ribbon: 20 segments, 40m long, 2.5m wide, fading out with distance
-const RIBBON_SEGMENTS = 20, RIBBON_LENGTH = 40, RIBBON_WIDTH = 2.5;
-const ribbonGeo = new THREE.BufferGeometry();
-{
-  const verts = new Float32Array((RIBBON_SEGMENTS + 1) * 2 * 3);
-  const colors = new Float32Array((RIBBON_SEGMENTS + 1) * 2 * 3);
-  const idx = [];
-  for (let i = 0; i < RIBBON_SEGMENTS; i++) {
-    const a = i * 2, b = i * 2 + 1, c = i * 2 + 2, d = i * 2 + 3;
-    idx.push(a, b, c, b, d, c);
-  }
-  for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
-    // fade from bright blue (near) to black (far); additive blending makes
-    // black invisible, so the ribbon dissolves into the road ahead
-    const f = 1 - i / RIBBON_SEGMENTS;
-    const r = 0.15 * f, g = 0.45 * f, b = 1.0 * f;
-    colors.set([r, g, b, r, g, b], i * 6);
-  }
-  ribbonGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3).setUsage(THREE.DynamicDrawUsage));
-  ribbonGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  ribbonGeo.setIndex(idx);
-}
-const ribbon = new THREE.Mesh(ribbonGeo, new THREE.MeshBasicMaterial({
-  vertexColors: true, transparent: true, blending: THREE.AdditiveBlending,
-  depthWrite: false, side: THREE.DoubleSide
-}));
-ribbon.renderOrder = 5;
-ribbon.frustumCulled = false;
-scene.add(ribbon);
-
-const _rFwd = new THREE.Vector3(), _rRight = new THREE.Vector3(), _rPos = new THREE.Vector3();
-function updateRibbon() {
-  if (!navMode || mode !== 'walk' || !model) { ribbon.visible = false; return; }
-  ribbon.visible = true;
-  _rFwd.set(Math.sin(charYaw), 0, Math.cos(charYaw));
-  _rRight.set(-_rFwd.z, 0, _rFwd.x);
-  const pos = ribbonGeo.attributes.position.array;
-  for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
-    const t = (i / RIBBON_SEGMENTS) * RIBBON_LENGTH;
-    _rPos.copy(charPos).addScaledVector(_rFwd, t);
-    const y = groundHeight(_rPos.x, _rPos.z, charPos.y) + 0.15;
-    const hw = RIBBON_WIDTH / 2;
-    pos.set([
-      _rPos.x - _rRight.x * hw, y, _rPos.z - _rRight.z * hw,
-      _rPos.x + _rRight.x * hw, y, _rPos.z + _rRight.z * hw
-    ], i * 6);
-  }
-  ribbonGeo.attributes.position.needsUpdate = true;
-}
 
 // Nav HUD: speed (from actual movement), compass heading, area name
 const navHud = document.getElementById('nav-hud');
@@ -585,6 +746,8 @@ function setNightMode(on) {
     sun.color.set(0xfff2dd);
     if (fogWallMat) fogWallMat.color.set(0xffffff);
   }
+  // procedural outer city: lit windows glow at night
+  for (const m of outerCityWinMats) m.emissiveIntensity = on ? 1.4 : 0.15;
 }
 document.getElementById('nightToggle').addEventListener('click', () => setNightMode(!nightMode));
 
@@ -593,18 +756,18 @@ function spawnCharacter() {
   const sz = SPAWN_RAW.z - modelCenter.z;
   charPos.set(sx, 0, sz);
   charPos.y = groundHeight(sx, sz, 50);
-  charYaw = Math.PI; // face the harbour (-X)
+  charYaw = 0; // face the harbour (south, +Z)
   charGroup.position.copy(charPos);
   charGroup.rotation.y = charYaw;
   _prevPos.copy(charPos); // so the speedometer doesn't spike on spawn
-  // camera east of the character, looking west at the podium + harbour
-  camYaw = Math.PI / 2;
+  // camera north of the character, looking south at the pier + harbour
+  camYaw = Math.PI;
   camPitch = 0.35;
   camDist = 14;
 }
 
 // ---------- walk-mode camera ----------
-let camYaw = Math.PI / 2, camPitch = 0.35, camDist = 14;
+let camYaw = Math.PI, camPitch = 0.35, camDist = 14;
 let dragging = false, lastX = 0, lastY = 0;
 
 renderer.domElement.addEventListener('pointerdown', (e) => {
@@ -663,6 +826,7 @@ function onLoaded(gltf, name) {
   buildGround();
   buildRaycastTargets();
   buildFogWalls();
+  buildOuterCity();
   spawnCharacter();
   setMode(mode); // apply the current mode to the fresh model
 }
@@ -755,6 +919,54 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
+// ---------- touch controls (mobile) ----------
+// Virtual joystick (bottom-left) moves the character; drag anywhere else
+// on the screen rotates the camera (the pointer handlers above already
+// cover touch). Buttons: hold 跑 to run, 升 to fly up, 降 to descend.
+const joy = { x: 0, y: 0, active: false, id: null };
+let touchRun = false, touchFlyUp = false, touchFlyDown = false;
+const joyEl = document.getElementById('joy');
+const joyKnob = document.getElementById('joy-knob');
+const JOY_RADIUS = 44; // px the knob can travel from centre
+function joyMove(e) {
+  const r = joyEl.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  let dx = e.clientX - cx, dy = e.clientY - cy;
+  const len = Math.hypot(dx, dy);
+  if (len > JOY_RADIUS) { dx *= JOY_RADIUS / len; dy *= JOY_RADIUS / len; }
+  joyKnob.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
+  // dead zone ~15% so a resting thumb doesn't drift the character
+  const nx = dx / JOY_RADIUS, ny = dy / JOY_RADIUS;
+  if (Math.hypot(nx, ny) < 0.15) { joy.x = 0; joy.y = 0; }
+  else { joy.x = nx; joy.y = ny; }
+}
+function joyEnd(e) {
+  if (e.pointerId !== joy.id) return;
+  joy.active = false; joy.id = null; joy.x = 0; joy.y = 0;
+  joyKnob.style.transform = 'translate(-50%, -50%)';
+}
+joyEl.addEventListener('pointerdown', (e) => {
+  if (joy.active) return;
+  joy.active = true; joy.id = e.pointerId;
+  joyEl.setPointerCapture(e.pointerId);
+  joyMove(e);
+});
+joyEl.addEventListener('pointermove', (e) => { if (joy.active && e.pointerId === joy.id) joyMove(e); });
+joyEl.addEventListener('pointerup', joyEnd);
+joyEl.addEventListener('pointercancel', joyEnd);
+
+function holdButton(id, set) {
+  const el = document.getElementById(id);
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); set(true); el.classList.add('on'); });
+  const off = () => { set(false); el.classList.remove('on'); };
+  el.addEventListener('pointerup', off);
+  el.addEventListener('pointercancel', off);
+  el.addEventListener('pointerleave', off);
+}
+holdButton('btn-run', (v) => { touchRun = v; });
+holdButton('btn-up', (v) => { touchFlyUp = v; });
+holdButton('btn-down', (v) => { touchFlyDown = v; });
+
 const clock = new THREE.Clock();
 let frames = 0, fpsTime = 0;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -772,17 +984,25 @@ function updateWalk(dt) {
   if (keys['KeyS']) move.sub(fwd);
   if (keys['KeyD']) move.add(right);
   if (keys['KeyA']) move.sub(right);
+  // touch joystick: push up = forward, push right = strafe right
+  if (joy.active) {
+    move.addScaledVector(fwd, -joy.y);
+    move.addScaledVector(right, joy.x);
+  }
   moving = move.lengthSq() > 0;
-  const running = keys['ShiftLeft'] || keys['ShiftRight'];
-  const wantFly = keys['Space'];
-  const wantDown = keys['ControlLeft'] || keys['ControlRight'];
+  const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
+  const wantFly = keys['Space'] || touchFlyUp;
+  const wantDown = keys['ControlLeft'] || keys['ControlRight'] || touchFlyDown;
   // vertical: hold Space to fly up, Ctrl to descend; otherwise hover
   let vy = 0;
   if (wantFly) { flying = true; vy = 12; }
   if (wantDown) { vy = -12; }
   if (moving) {
+    // analog stick: slight push = slow walk (keyboard input is always
+    // magnitude >= 1, so it stays full speed)
+    const mag = Math.min(1, move.length());
     move.normalize();
-    const speed = flying ? (running ? 60 : 30) : (running ? 25 : 6);
+    const speed = (flying ? (running ? 60 : 30) : (running ? 25 : 6)) * mag;
     charPos.addScaledVector(move, speed * dt);
     // face the movement direction (smooth turn)
     const targetYaw = Math.atan2(move.x, move.z);
@@ -847,7 +1067,6 @@ function animate() {
   else if (model) updateFly(dt);
   else controls.update();
   updateShadowFocus();
-  updateRibbon();
   updateNavHud(dt);
   renderer.render(scene, camera);
 
