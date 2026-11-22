@@ -406,6 +406,28 @@ function buildOuterCity() {
   // east of 4D's south half is open harbour.
   band(-sx / 2, sx / 2 + 150, -sz / 2 - 420, -sz / 2 + 35, 25, 90, 'S');
   band(sx / 2 + 35, sx / 2 + 450, -sz / 2, 0, 25, 90, 'W');
+  // Continuous edge rows: the 70m grid leaves 22-48m gaps between
+  // buildings, which reads as a strip of empty ground between the
+  // procedural city and the real map. These two rows are placed
+  // edge-to-edge with no gaps, faces flush to the map edge — like
+  // Hong Kong's street walls. (The grid's own edge row stays; it is
+  // hidden behind / inside this wall.)
+  let cx = -sx / 2;
+  while (cx < sx / 2 + 150) {
+    const w = 24 + rng() * 20, d = 24 + rng() * 20;
+    let h = 25 + rng() * 65;
+    if (rng() < 0.1) h = 90 + rng() * 50;
+    spots.push([cx + w / 2, -sz / 2 - d / 2, w, h, d, rng() < 0.5 ? 0 : 1, 'band']);
+    cx += w;
+  }
+  let cz = -sz / 2;
+  while (cz < 0) {
+    const w = 24 + rng() * 20, d = 24 + rng() * 20;
+    let h = 25 + rng() * 65;
+    if (rng() < 0.1) h = 90 + rng() * 50;
+    spots.push([sx / 2 + d / 2, cz + w / 2, d, h, w, rng() < 0.5 ? 0 : 1, 'band']);
+    cz += w;
+  }
   // south skyline: Hong Kong Island towers across the harbour. Row
   // distances are real: the Star Ferry crossing (TST pier to Central
   // waterfront) is ~1300m, and the inland towers sit ~600m behind it.
