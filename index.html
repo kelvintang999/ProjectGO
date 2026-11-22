@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>尖沙咀 Demo — 香港 3D</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1420; font-family: system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; top: 12px; left: 12px; z-index: 10; color: #e8eef7;
+    background: rgba(10, 16, 28, 0.72); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px; padding: 12px 14px; max-width: 340px; backdrop-filter: blur(6px);
+  }
+  #hud h1 { font-size: 16px; margin: 0 0 4px; font-weight: 700; }
+  #hud p { font-size: 12px; line-height: 1.6; margin: 4px 0; color: #b9c6da; white-space: pre-line; }
+  #hud .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: 13px; color: #fff; background: #2563eb; border: 0;
+    border-radius: 8px; padding: 8px 12px; cursor: pointer;
+  }
+  button.secondary { background: #334155; }
+  button:hover { filter: brightness(1.15); }
+  #bar-wrap { height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; margin-top: 8px; display: none; }
+  #bar { height: 100%; width: 0%; background: #38bdf8; }
+  #status { font-size: 12px; color: #7dd3fc; min-height: 16px; }
+  #help {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+    color: #dbe4f0; background: rgba(10, 16, 28, 0.72); border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px; padding: 8px 16px; font-size: 12px; white-space: nowrap; backdrop-filter: blur(6px);
+  }
+  #drop-hint {
+    position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center;
+    background: rgba(37, 99, 235, 0.25); border: 3px dashed #60a5fa; border-radius: 16px;
+    color: #fff; font-size: 22px; font-weight: 700; pointer-events: none;
+  }
+  #toast {
+    position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%) translateY(8px); z-index: 11;
+    color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 10px 20px; font-size: 14px; opacity: 0; pointer-events: none;
+    transition: opacity 0.3s, transform 0.3s; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #tesla-hud {
+    position: fixed; top: 12px; right: 12px; z-index: 10; text-align: right;
+    color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.8); pointer-events: none;
+    display: none;
+  }
+  #tesla-speed { font-size: 56px; font-weight: 200; line-height: 1; letter-spacing: -1px; }
+  #tesla-unit { font-size: 13px; color: #cbd5e1; margin-top: 2px; }
+  #tesla-nav { font-size: 14px; color: #e2e8f0; margin-top: 8px; }
+  #err { color: #fca5a5; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud">
+  <h1>尖沙咀 Demo</h1>
+  <p id="meta">尖沙咀 3D · 尚未載入模型</p>
+  <p id="stats"></p>
+  <div id="bar-wrap"><div id="bar"></div></div>
+  <p id="status">準備就緒</p>
+  <div class="row">
+    <button id="pick">選擇 .glb 檔案</button>
+    <button id="reset" class="secondary">重置視角</button>
+    <button id="shadowToggle" class="secondary">陰影：開</button>
+    <button id="modeToggle" class="secondary">模式：步行</button>
+    <button id="teslaToggle" class="secondary">Tesla 模式：開</button>
+    <button id="nightToggle" class="secondary">夜間：關</button>
+  </div>
+  <input id="file" type="file" accept=".glb,.gltf" hidden>
+</div>
+
+<div id="help">步行：WASD 移動 · Shift 跑 · 拖曳轉鏡頭 · 滾輪拉遠近 · 按住空白鍵飛行 · Ctrl 下降 — 飛行：WASD 飛 · Q / E 上下</div>
+<div id="toast"></div>
+<div id="tesla-hud">
+  <div id="tesla-speed">0</div>
+  <div id="tesla-unit">km/h</div>
+  <div id="tesla-nav">尖沙咀</div>
+</div>
+<div id="drop-hint">放開以載入 .glb</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+const app = document.getElementById('app');
+const metaEl = document.getElementById('meta');
+const statsEl = document.getElementById('stats');
+const statusEl = document.getElementById('status');
+const barWrap = document.getElementById('bar-wrap');
+const barEl = document.getElementById('bar');
+const fileInput = document.getElementById('file');
+const dropHint = document.getElementById('drop-hint');
+
+// ---------- renderer / scene ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87b5d6);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 8000);
+camera.position.set(400, 260, 400);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0, 20, 0);
+
+// ---------- lights ----------
+const hemi = new THREE.HemisphereLight(0xbfd9ff, 0x8a7a5a, 0.9);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff2dd, 2.0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+scene.add(sun.target);
+
+// ---------- loader ----------
+const draco = new DRACOLoader();
+draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
+const loader = new GLTFLoader();
+loader.setDRACOLoader(draco);
+
+let model = null;
+let modelSize = new THREE.Vector3(300, 100, 300);
+let modelCenter = new THREE.Vector3();
+let recenterDone = false;
+
+// ---------- mode: 'walk' (third-person) or 'fly' (orbit + WASD) ----------
+let mode = 'walk';
+
+function setStatus(text, isError) {
+  statusEl.textContent = text;
+  statusEl.style.color = isError ? '#fca5a5' : '#7dd3fc';
+}
+
+function showProgress(pct) {
+  barWrap.style.display = 'block';
+  barEl.style.width = Math.round(pct * 100) + '%';
+}
+
+function frameModel() {
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  modelSize = size;
+  // record the raw (pre-recenter) centre once per model: later frameModel
+  // calls (fly-mode reset) see the already-recentered model, whose centre
+  // is ~0 and must not overwrite this
+  if (!recenterDone) { modelCenter = center; recenterDone = true; }
+
+  // recenter: ground at y=0, center at origin (XZ)
+  model.position.x -= center.x;
+  model.position.z -= center.z;
+  model.position.y -= box.min.y;
+
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const dist = maxDim * 1.35;
+  camera.position.set(dist * 0.75, dist * 0.55, dist * 0.75);
+  controls.target.set(0, size.y * 0.3, 0);
+  controls.update();
+
+  // sun + shadows fitted to the model
+  sun.position.set(dist * 0.8, dist * 1.1, dist * 0.5);
+  sun.target.position.set(0, 0, 0);
+  const sc = sun.shadow.camera;
+  sc.left = -maxDim; sc.right = maxDim;
+  sc.top = maxDim; sc.bottom = -maxDim;
+  sc.near = 1; sc.far = maxDim * 4;
+  sc.updateProjectionMatrix();
+
+  // fog + water (harbour, west of the model)
+  scene.fog = new THREE.Fog(0x87b5d6, maxDim * 1.6, maxDim * 4.5);
+  addWater(size);
+
+  metaEl.textContent = '已載入：' + (model.userData.name || '模型');
+  setStatus('載入完成，拖曳旋轉、WASD 移動');
+  barWrap.style.display = 'none';
+}
+
+let waterMeshes = [];
+function addWater(size) {
+  for (const w of waterMeshes) scene.remove(w);
+  waterMeshes = [];
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x1a5f7a, transparent: true, opacity: 0.85,
+    roughness: 0.15, metalness: 0.1
+  });
+  const mkPlane = (w, d, x, z) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, 1.5, z);
+    m.receiveShadow = true;
+    scene.add(m);
+    waterMeshes.push(m);
+  };
+  // harbour west (-X) of the model
+  const w = size.x * 2.5, d = size.z * 3;
+  mkPlane(w, d, -size.x / 2 - w / 2 + size.x * 0.2, 0);
+  // two-tile map (taller than wide): the southern tile is half harbour,
+  // so add a south plane too — land pokes through it where the peninsula
+  // tip exists, since the ground there sits above y=1.5
+  if (size.z > size.x * 1.2) {
+    mkPlane(size.x * 1.6, size.z * 0.65, 0, size.z * 0.425);
+  }
+}
+
+// ---------- character (built from primitives, ~2m tall) ----------
+const charGroup = new THREE.Group();
+let legL, legR, charBody;
+let charPos = new THREE.Vector3(0, 0, 0);
+let charYaw = 0;
+let swingPhase = 0;
+let moving = false;
+
+function createCharacter() {
+  const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 });
+  charBody = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.7, 4, 12), mat(0xff6b35));
+  body.position.y = 1.15;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), mat(0xffd9b3));
+  head.position.y = 1.95;
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.32, 0.16, 16), mat(0x2563eb));
+  cap.position.y = 2.15;
+  charBody.add(body, head, cap);
+  // legs pivot at the hip so they can swing
+  const legGeo = new THREE.CapsuleGeometry(0.13, 0.55, 4, 8);
+  legL = new THREE.Group(); legR = new THREE.Group();
+  const meshL = new THREE.Mesh(legGeo, mat(0x2b3a55));
+  const meshR = new THREE.Mesh(legGeo, mat(0x2b3a55));
+  meshL.position.y = -0.42; meshR.position.y = -0.42;
+  legL.add(meshL); legR.add(meshR);
+  legL.position.set(-0.18, 0.85, 0);
+  legR.position.set(0.18, 0.85, 0);
+  charGroup.add(charBody, legL, legR);
+  charGroup.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
+  scene.add(charGroup);
+}
+createCharacter();
+
+// ---------- ground height ----------
+// Terrain heightfield: bin terrain vertices into one grid (order-independent),
+// bilinear interpolation for smooth walking. Buildings/roads come from a
+// downward raycast (terrain excluded - the heightfield covers it).
+// Multi-tile maps have one terrain mesh per tile; all of them feed the
+// same heightfield, so the ground works across the whole map.
+let heightGrid = null;
+let buildingMeshes = [];
+const downRay = new THREE.Raycaster();
+// Canton Road, in scene coords BEFORE recentering (Blender rebase X -266,
+// northing +15 -> scene Z -15). spawnCharacter converts with modelCenter,
+// so the spawn survives the map growing (new tiles shift the centre).
+const SPAWN_RAW = { x: -266, z: -15 };
+
+function buildGround() {
+  model.updateMatrixWorld(true);
+  const meshes = [];
+  model.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  // terrain meshes: children of a node whose name is a terrain model ID
+  // (T + digits, e.g. T35250174000106E11) — one per tile. Fallback for
+  // models without that naming: the single largest-footprint mesh.
+  const isTerrain = (m) => {
+    let o = m;
+    while (o) {
+      if (/^T\d/.test(o.name || '')) return true;
+      o = o.parent;
+    }
+    return false;
+  };
+  let terrains = meshes.filter(isTerrain);
+  if (terrains.length === 0) {
+    let best = null, bestArea = 0;
+    const tmpBox = new THREE.Box3();
+    for (const m of meshes) {
+      tmpBox.setFromObject(m);
+      const area = (tmpBox.max.x - tmpBox.min.x) * (tmpBox.max.z - tmpBox.min.z);
+      if (area > bestArea) { bestArea = area; best = m; }
+    }
+    terrains = best ? [best] : [];
+  }
+  const terrainSet = new Set(terrains);
+  buildingMeshes = meshes.filter((m) => !terrainSet.has(m));
+
+  // one heightfield over the union of all terrain meshes (~3m cells)
+  const box = new THREE.Box3();
+  for (const t of terrains) box.expandByObject(t);
+  const nx = THREE.MathUtils.clamp(Math.round((box.max.x - box.min.x) / 3), 64, 512);
+  const nz = THREE.MathUtils.clamp(Math.round((box.max.z - box.min.z) / 3), 64, 512);
+  const data = new Float32Array(nx * nz).fill(-Infinity);
+  const v = new THREE.Vector3();
+  for (const t of terrains) {
+    const pos = t.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(t.matrixWorld);
+      const ix = Math.min(nx - 1, Math.max(0, Math.floor((v.x - box.min.x) / (box.max.x - box.min.x) * nx)));
+      const iz = Math.min(nz - 1, Math.max(0, Math.floor((v.z - box.min.z) / (box.max.z - box.min.z) * nz)));
+      const idx = iz * nx + ix;
+      if (v.y > data[idx]) data[idx] = v.y;
+    }
+  }
+  let gmin = Infinity;
+  for (let i = 0; i < data.length; i++) if (data[i] !== -Infinity && data[i] < gmin) gmin = data[i];
+  for (let i = 0; i < data.length; i++) if (data[i] === -Infinity) data[i] = gmin;
+  heightGrid = { minX: box.min.x, minZ: box.min.z,
+    sizeX: box.max.x - box.min.x, sizeZ: box.max.z - box.min.z, nx, nz, data };
+}
+
+function terrainHeight(x, z) {
+  if (!heightGrid) return 0;
+  const g = heightGrid;
+  const fx = THREE.MathUtils.clamp((x - g.minX) / g.sizeX * (g.nx - 1), 0, g.nx - 1.001);
+  const fz = THREE.MathUtils.clamp((z - g.minZ) / g.sizeZ * (g.nz - 1), 0, g.nz - 1.001);
+  const ix = Math.floor(fx), iz = Math.floor(fz);
+  const tx = fx - ix, tz = fz - iz;
+  const ix1 = Math.min(ix + 1, g.nx - 1), iz1 = Math.min(iz + 1, g.nz - 1);
+  const h00 = g.data[iz * g.nx + ix], h10 = g.data[iz * g.nx + ix1];
+  const h01 = g.data[iz1 * g.nx + ix], h11 = g.data[iz1 * g.nx + ix1];
+  return (h00 * (1 - tx) + h10 * tx) * (1 - tz) + (h01 * (1 - tx) + h11 * tx) * tz;
+}
+
+function groundHeight(x, z, refY) {
+  let h = terrainHeight(x, z);
+  // highest building/road hit near/below the character: lets the character
+  // step onto podiums, but not pop up onto footbridges overhead.
+  downRay.set(new THREE.Vector3(x, refY + 50, z), new THREE.Vector3(0, -1, 0));
+  downRay.far = 60;
+  const hits = downRay.intersectObjects(buildingMeshes, false);
+  for (const hit of hits) {
+    if (hit.point.y <= refY + 2.5) { h = Math.max(h, hit.point.y); break; }
+  }
+  return h;
+}
+
+// ---------- map boundary: fog-of-war walls + playable bounds ----------
+let bounds = null; // {minX, maxX, minZ, maxZ}, from the terrain heightfield
+let fogWalls = [];
+let fogWallMat = null;
+
+function buildFogWalls() {
+  for (const w of fogWalls) scene.remove(w);
+  fogWalls = [];
+  if (!heightGrid) return;
+  const g = heightGrid;
+  const margin = 15;
+  bounds = {
+    minX: g.minX + margin, maxX: g.minX + g.sizeX - margin,
+    minZ: g.minZ + margin, maxZ: g.minZ + g.sizeZ - margin
+  };
+  // mist texture: opaque fog at the bottom, fading to clear at the top
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 256, 0, 0);
+  grad.addColorStop(0, 'rgba(200, 215, 230, 0.95)');
+  grad.addColorStop(0.5, 'rgba(200, 215, 230, 0.55)');
+  grad.addColorStop(1, 'rgba(200, 215, 230, 0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 400; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.05 + Math.random() * 0.08) + ')';
+    ctx.fillRect(Math.random() * 256, Math.random() * 256,
+      20 + Math.random() * 60, 4 + Math.random() * 10);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, side: THREE.DoubleSide,
+    depthWrite: false, fog: false
+  });
+  fogWallMat = mat;
+  const wallH = 160; // taller than the tallest tower (~132m)
+  const mkWall = (w, x, z, ry) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, wallH), mat);
+    m.position.set(x, wallH / 2, z);
+    m.rotation.y = ry;
+    m.renderOrder = 10;
+    scene.add(m);
+    fogWalls.push(m);
+  };
+  const cx = (bounds.minX + bounds.maxX) / 2, cz = (bounds.minZ + bounds.maxZ) / 2;
+  const sx = bounds.maxX - bounds.minX, sz = bounds.maxZ - bounds.minZ;
+  mkWall(sx, cx, bounds.minZ, 0);
+  mkWall(sx, cx, bounds.maxZ, 0);
+  mkWall(sz, bounds.minX, cz, Math.PI / 2);
+  mkWall(sz, bounds.maxX, cz, Math.PI / 2);
+}
+
+// boundary toast: "the area ahead — explore it later"
+const toastEl = document.getElementById('toast');
+let toastTimer = null, lastToast = 0;
+function showBoundaryToast() {
+  const now = performance.now();
+  if (now - lastToast < 8000) return; // at most once per 8s
+  lastToast = now;
+  toastEl.textContent = '前面的區域，以後再來探索吧！';
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3500);
+}
+
+function clampToBounds() {
+  if (!bounds) return;
+  let hit = false;
+  if (charPos.x < bounds.minX) { charPos.x = bounds.minX; hit = true; }
+  if (charPos.x > bounds.maxX) { charPos.x = bounds.maxX; hit = true; }
+  if (charPos.z < bounds.minZ) { charPos.z = bounds.minZ; hit = true; }
+  if (charPos.z > bounds.maxZ) { charPos.z = bounds.maxZ; hit = true; }
+  if (hit) showBoundaryToast();
+}
+
+// ---------- Tesla Reality View: blue path ribbon + HUD + night mode ----------
+// The blue ribbon is the signature element: a glowing path on the road ahead
+// of the character, draped over the ground. The HUD shows speed / heading /
+// area, Tesla-style. Night mode dims the lights for the screenshot look.
+let teslaMode = true;
+let nightMode = false;
+
+// ribbon: 20 segments, 40m long, 2.5m wide, fading out with distance
+const RIBBON_SEGMENTS = 20, RIBBON_LENGTH = 40, RIBBON_WIDTH = 2.5;
+const ribbonGeo = new THREE.BufferGeometry();
+{
+  const verts = new Float32Array((RIBBON_SEGMENTS + 1) * 2 * 3);
+  const colors = new Float32Array((RIBBON_SEGMENTS + 1) * 2 * 3);
+  const idx = [];
+  for (let i = 0; i < RIBBON_SEGMENTS; i++) {
+    const a = i * 2, b = i * 2 + 1, c = i * 2 + 2, d = i * 2 + 3;
+    idx.push(a, b, c, b, d, c);
+  }
+  for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
+    // fade from bright blue (near) to black (far); additive blending makes
+    // black invisible, so the ribbon dissolves into the road ahead
+    const f = 1 - i / RIBBON_SEGMENTS;
+    const r = 0.15 * f, g = 0.45 * f, b = 1.0 * f;
+    colors.set([r, g, b, r, g, b], i * 6);
+  }
+  ribbonGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3).setUsage(THREE.DynamicDrawUsage));
+  ribbonGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  ribbonGeo.setIndex(idx);
+}
+const ribbon = new THREE.Mesh(ribbonGeo, new THREE.MeshBasicMaterial({
+  vertexColors: true, transparent: true, blending: THREE.AdditiveBlending,
+  depthWrite: false, side: THREE.DoubleSide
+}));
+ribbon.renderOrder = 5;
+ribbon.frustumCulled = false;
+scene.add(ribbon);
+
+const _rFwd = new THREE.Vector3(), _rRight = new THREE.Vector3(), _rPos = new THREE.Vector3();
+function updateRibbon() {
+  if (!teslaMode || mode !== 'walk' || !model) { ribbon.visible = false; return; }
+  ribbon.visible = true;
+  _rFwd.set(Math.sin(charYaw), 0, Math.cos(charYaw));
+  _rRight.set(-_rFwd.z, 0, _rFwd.x);
+  const pos = ribbonGeo.attributes.position.array;
+  for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
+    const t = (i / RIBBON_SEGMENTS) * RIBBON_LENGTH;
+    _rPos.copy(charPos).addScaledVector(_rFwd, t);
+    const y = groundHeight(_rPos.x, _rPos.z, charPos.y) + 0.15;
+    const hw = RIBBON_WIDTH / 2;
+    pos.set([
+      _rPos.x - _rRight.x * hw, y, _rPos.z - _rRight.z * hw,
+      _rPos.x + _rRight.x * hw, y, _rPos.z + _rRight.z * hw
+    ], i * 6);
+  }
+  ribbonGeo.attributes.position.needsUpdate = true;
+}
+
+// Tesla HUD: speed (from actual movement), compass heading, area name
+const teslaHud = document.getElementById('tesla-hud');
+const teslaSpeedEl = document.getElementById('tesla-speed');
+const teslaNavEl = document.getElementById('tesla-nav');
+const _prevPos = new THREE.Vector3();
+let smoothKmh = 0;
+const COMPASS = ['北', '東北', '東', '東南', '南', '西南', '西', '西北'];
+function updateTeslaHud(dt) {
+  if (!teslaMode || mode !== 'walk' || !model) { teslaHud.style.display = 'none'; return; }
+  teslaHud.style.display = 'block';
+  // speed: distance moved per second -> km/h, smoothed
+  const dist = charPos.distanceTo(_prevPos);
+  _prevPos.copy(charPos);
+  const kmh = dt > 0 ? (dist / dt) * 3.6 : 0;
+  smoothKmh += (kmh - smoothKmh) * Math.min(1, dt * 6);
+  teslaSpeedEl.textContent = Math.round(smoothKmh);
+  // heading: north is -Z in this scene (Blender northing -> glTF -Z)
+  const headingDeg = (THREE.MathUtils.radToDeg(Math.atan2(Math.sin(charYaw), -Math.cos(charYaw))) + 360) % 360;
+  const compass = COMPASS[Math.round(headingDeg / 45) % 8];
+  // area: convert back to pre-recenter scene coords (Canton Road is at
+  // raw x -266; the south tile / harbourfront is raw z > 300)
+  const rawX = charPos.x + modelCenter.x;
+  const rawZ = charPos.z + modelCenter.z;
+  let area = '尖沙咀';
+  if (Math.abs(rawX - (-266)) < 40 && Math.abs(rawZ) < 200) area = '廣東道';
+  else if (rawZ > 300) area = '尖沙咀海濱';
+  teslaNavEl.textContent = area + ' · ' + compass;
+}
+
+function setTeslaMode(on) {
+  teslaMode = on;
+  document.getElementById('teslaToggle').textContent = 'Tesla 模式：' + (on ? '開' : '關');
+}
+document.getElementById('teslaToggle').addEventListener('click', () => setTeslaMode(!teslaMode));
+
+// day / night lighting presets (textures are daytime photos, so night is a
+// dimmed mood, not true night photography)
+function setNightMode(on) {
+  nightMode = on;
+  document.getElementById('nightToggle').textContent = '夜間：' + (on ? '開' : '關');
+  if (on) {
+    scene.background.set(0x0a0e1a);
+    scene.fog.color.set(0x0a0e1a);
+    hemi.intensity = 0.15;
+    hemi.color.set(0x334466);
+    sun.intensity = 0.25;
+    sun.color.set(0x8fb4ff);
+    if (fogWallMat) fogWallMat.color.set(0x5a6b80);
+  } else {
+    scene.background.set(0x87b5d6);
+    if (scene.fog) scene.fog.color.set(0x87b5d6);
+    hemi.intensity = 0.9;
+    hemi.color.set(0xbfd9ff);
+    sun.intensity = 2.0;
+    sun.color.set(0xfff2dd);
+    if (fogWallMat) fogWallMat.color.set(0xffffff);
+  }
+}
+document.getElementById('nightToggle').addEventListener('click', () => setNightMode(!nightMode));
+
+function spawnCharacter() {
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  charPos.set(sx, 0, sz);
+  charPos.y = groundHeight(sx, sz, 50);
+  charYaw = Math.PI; // face the harbour (-X)
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  _prevPos.copy(charPos); // so the speedometer doesn't spike on spawn
+  // camera east of the character, looking west at the podium + harbour
+  camYaw = Math.PI / 2;
+  camPitch = 0.35;
+  camDist = 14;
+}
+
+// ---------- walk-mode camera ----------
+let camYaw = Math.PI / 2, camPitch = 0.35, camDist = 14;
+let dragging = false, lastX = 0, lastY = 0;
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (mode !== 'walk') return;
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+});
+window.addEventListener('pointermove', (e) => {
+  if (!dragging || mode !== 'walk') return;
+  camYaw -= (e.clientX - lastX) * 0.005;
+  camPitch = THREE.MathUtils.clamp(camPitch + (e.clientY - lastY) * 0.004, 0.08, 1.2);
+  lastX = e.clientX; lastY = e.clientY;
+});
+window.addEventListener('pointerup', () => { dragging = false; });
+renderer.domElement.addEventListener('wheel', (e) => {
+  if (mode !== 'walk') return;
+  camDist = THREE.MathUtils.clamp(camDist + e.deltaY * 0.01, 6, 40);
+}, { passive: true });
+
+function updateWalkCamera() {
+  const target = new THREE.Vector3(charPos.x, charPos.y + 2.2, charPos.z);
+  const off = new THREE.Vector3(
+    Math.sin(camYaw) * Math.cos(camPitch),
+    Math.sin(camPitch),
+    Math.cos(camYaw) * Math.cos(camPitch)
+  ).multiplyScalar(camDist);
+  camera.position.copy(target).add(off);
+  camera.lookAt(target);
+}
+
+// ---------- mode switching ----------
+function setMode(m) {
+  mode = m;
+  document.getElementById('modeToggle').textContent = '模式：' + (mode === 'walk' ? '步行' : '飛行');
+  controls.enabled = (mode === 'fly');
+  if (mode === 'walk' && model) updateWalkCamera();
+  if (mode === 'fly' && model) {
+    // put the orbit target on the character so fly starts from where you are
+    controls.target.set(charPos.x, charPos.y + 2, charPos.z);
+    controls.update();
+  }
+}
+document.getElementById('modeToggle').addEventListener('click', () => {
+  setMode(mode === 'walk' ? 'fly' : 'walk');
+});
+
+function onLoaded(gltf, name) {
+  if (model) scene.remove(model);
+  model = gltf.scene;
+  model.userData.name = name;
+  model.traverse((o) => {
+    if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+  });
+  scene.add(model);
+  recenterDone = false;
+  frameModel();
+  buildGround();
+  buildFogWalls();
+  spawnCharacter();
+  setMode(mode); // apply the current mode to the fresh model
+}
+
+function onError(err) {
+  console.error(err);
+  setStatus('載入失敗：' + (err && err.message ? err.message : err), true);
+  barWrap.style.display = 'none';
+}
+
+function loadFromUrl(url, name) {
+  setStatus('載入中：' + name);
+  showProgress(0);
+  loader.load(url, (g) => onLoaded(g, name), (e) => {
+    if (e.total > 0) showProgress(e.loaded / e.total);
+  }, onError);
+}
+
+function loadFromFile(file) {
+  setStatus('讀取檔案：' + file.name);
+  showProgress(0.5);
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      loader.parse(reader.result, '', (g) => onLoaded(g, file.name), onError);
+    } catch (err) { onError(err); }
+  };
+  reader.onerror = () => onError(new Error('無法讀取檔案'));
+  reader.readAsArrayBuffer(file);
+}
+
+// ---------- entry: ?model= URL, else ./full_tile.glb, else picker ----------
+const params = new URLSearchParams(location.search);
+const modelParam = params.get('model');
+if (modelParam) {
+  loadFromUrl(modelParam, modelParam.split('/').pop());
+} else {
+  // try the default file next to this page; if missing, show the picker
+  fetch('./full_tile.glb', { method: 'HEAD' }).then((r) => {
+    if (r.ok) loadFromUrl('./full_tile.glb', 'full_tile.glb');
+    else setStatus('尚未載入模型，請選擇 full_tile.glb');
+  }).catch(() => setStatus('尚未載入模型，請選擇 full_tile.glb'));
+}
+
+// ---------- file picker + drag & drop ----------
+document.getElementById('pick').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) loadFromFile(fileInput.files[0]);
+  fileInput.value = '';
+});
+window.addEventListener('dragover', (e) => { e.preventDefault(); dropHint.style.display = 'flex'; });
+window.addEventListener('dragleave', (e) => { if (e.target === document.body) dropHint.style.display = 'none'; });
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropHint.style.display = 'none';
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) loadFromFile(f);
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+  if (!model) return;
+  if (mode === 'walk') spawnCharacter();
+  else frameModel();
+});
+
+// shadow on/off (helps diagnose fill-rate / GPU bottlenecks)
+let shadowsOn = true;
+document.getElementById('shadowToggle').addEventListener('click', () => {
+  shadowsOn = !shadowsOn;
+  renderer.shadowMap.enabled = shadowsOn;
+  sun.castShadow = shadowsOn;
+  scene.traverse((o) => { if (o.isMesh && o.material) o.material.needsUpdate = true; });
+  document.getElementById('shadowToggle').textContent = '陰影：' + (shadowsOn ? '開' : '關');
+});
+
+// which GPU is the browser actually using? (dual-GPU laptops often run
+// Chrome on the integrated GPU, which is the #1 cause of low FPS here)
+const gl = renderer.getContext();
+let gpuName = '未知';
+try {
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  if (ext) gpuName = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || gpuName;
+} catch (e) { /* ignore */ }
+
+// ---------- input + animation ----------
+const keys = {};
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') e.preventDefault(); // Space = fly up (also avoids triggering focused buttons)
+  keys[e.code] = true;
+});
+window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+const clock = new THREE.Clock();
+let frames = 0, fpsTime = 0;
+const UP = new THREE.Vector3(0, 1, 0);
+
+let flying = false;
+
+function updateWalk(dt) {
+  // movement relative to the camera's view direction
+  const fwd = new THREE.Vector3(charPos.x - camera.position.x, 0, charPos.z - camera.position.z);
+  if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+  fwd.normalize();
+  const right = new THREE.Vector3().crossVectors(fwd, UP).normalize();
+  const move = new THREE.Vector3();
+  if (keys['KeyW']) move.add(fwd);
+  if (keys['KeyS']) move.sub(fwd);
+  if (keys['KeyD']) move.add(right);
+  if (keys['KeyA']) move.sub(right);
+  moving = move.lengthSq() > 0;
+  const running = keys['ShiftLeft'] || keys['ShiftRight'];
+  const wantFly = keys['Space'];
+  const wantDown = keys['ControlLeft'] || keys['ControlRight'];
+  // vertical: hold Space to fly up, Ctrl to descend; otherwise hover
+  let vy = 0;
+  if (wantFly) { flying = true; vy = 12; }
+  if (wantDown) { vy = -12; }
+  if (moving) {
+    move.normalize();
+    const speed = flying ? (running ? 60 : 30) : (running ? 25 : 6);
+    charPos.addScaledVector(move, speed * dt);
+    // face the movement direction (smooth turn)
+    const targetYaw = Math.atan2(move.x, move.z);
+    let d = targetYaw - charYaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    charYaw += d * Math.min(1, dt * 10);
+    if (!flying) swingPhase += dt * Math.min(speed, 12) * 1.2;
+  } else {
+    swingPhase *= 0.9;
+  }
+  // stay inside the map; hitting the edge shows the fog-of-war message
+  clampToBounds();
+  // vertical + ground
+  if (flying) {
+    charPos.y += vy * dt;
+    const gy = groundHeight(charPos.x, charPos.z, charPos.y);
+    if (charPos.y <= gy) { charPos.y = gy; if (vy <= 0) flying = false; }
+  } else {
+    const gy = groundHeight(charPos.x, charPos.z, charPos.y);
+    const rate = gy < charPos.y ? 12 : 6;
+    charPos.y += (gy - charPos.y) * Math.min(1, dt * rate);
+  }
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  // legs swing when running on the ground; dangle + lean forward when flying
+  const swing = (moving && !flying) ? Math.sin(swingPhase) * 0.7 : 0;
+  legL.rotation.x = flying ? 0.4 : swing;
+  legR.rotation.x = flying ? 0.4 : -swing;
+  charBody.position.y = (moving && !flying) ? Math.abs(Math.sin(swingPhase)) * 0.08 : 0;
+  charBody.rotation.x = flying ? 0.3 : 0;
+  updateWalkCamera();
+}
+
+function updateFly(dt) {
+  // move target + camera together (WASD on ground plane, Q/E vertical)
+  const speed = Math.max(modelSize.x, modelSize.z) * 0.25 * (keys['ShiftLeft'] || keys['ShiftRight'] ? 3 : 1) * dt;
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  forward.y = 0; forward.normalize();
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+  const move = new THREE.Vector3();
+  if (keys['KeyW']) move.add(forward);
+  if (keys['KeyS']) move.sub(forward);
+  if (keys['KeyD']) move.add(right);
+  if (keys['KeyA']) move.sub(right);
+  if (keys['KeyE'] || keys['Space']) move.y += 1;
+  if (keys['KeyQ']) move.y -= 1;
+  if (move.lengthSq() > 0) {
+    move.normalize().multiplyScalar(speed);
+    camera.position.add(move);
+    controls.target.add(move);
+  }
+  controls.update();
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  if (mode === 'walk' && model) updateWalk(dt);
+  else if (model) updateFly(dt);
+  else controls.update();
+  updateRibbon();
+  updateTeslaHud(dt);
+  renderer.render(scene, camera);
+
+  frames++; fpsTime += dt;
+  if (fpsTime >= 0.5) {
+    const fps = Math.round(frames / fpsTime);
+    frames = 0; fpsTime = 0;
+    statsEl.textContent = model
+      ? 'FPS ' + fps + ' · 三角面 ' + renderer.info.render.triangles.toLocaleString() + '\n顯示卡：' + gpuName
+      : '顯示卡：' + gpuName;
+  }
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
