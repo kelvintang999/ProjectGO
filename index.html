@@ -1230,6 +1230,10 @@ function loadBryce() {
 }
 function bryceFadeTo(action, dur) {
   if (bryce.current === action) return;
+  // Three.js deactivates an action once its weight fades to 0; a plain
+  // play() cannot revive it (Idle stayed frozen at weight 0 = T-pose
+  // after any one-shot). reset() clears the stale faded-out state first.
+  if (!action.isRunning()) action.reset();
   if (bryce.current) bryce.current.crossFadeTo(action, dur, false);
   action.play();
   bryce.current = action;
