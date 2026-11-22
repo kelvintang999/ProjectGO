@@ -858,17 +858,17 @@ function loadFromFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
-// ---------- entry: ?model= URL, else ./full_tile.glb, else picker ----------
+// ---------- entry: ?model= URL, else ./full_tst_tile.glb, else picker ----------
 const params = new URLSearchParams(location.search);
 const modelParam = params.get('model');
 if (modelParam) {
   loadFromUrl(modelParam, modelParam.split('/').pop());
 } else {
   // try the default file next to this page; if missing, show the picker
-  fetch('./full_tile.glb', { method: 'HEAD' }).then((r) => {
-    if (r.ok) loadFromUrl('./full_tile.glb', 'full_tile.glb');
-    else setStatus('尚未載入模型，請選擇 full_tile.glb');
-  }).catch(() => setStatus('尚未載入模型，請選擇 full_tile.glb'));
+  fetch('./full_tst_tile.glb', { method: 'HEAD' }).then((r) => {
+    if (r.ok) loadFromUrl('./full_tst_tile.glb', 'full_tst_tile.glb');
+    else setStatus('尚未載入模型，請選擇 full_tst_tile.glb');
+  }).catch(() => setStatus('尚未載入模型，請選擇 full_tst_tile.glb'));
 }
 
 // ---------- file picker + drag & drop ----------
