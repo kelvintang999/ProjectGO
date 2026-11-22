@@ -324,10 +324,12 @@ createCharacter();
 let heightGrid = null;
 let buildingMeshes = [];
 const downRay = new THREE.Raycaster();
-// Canton Road, in scene coords BEFORE recentering (Blender rebase X -266,
-// northing +15 -> scene Z -15). spawnCharacter converts with modelCenter,
-// so the spawn survives the map growing (new tiles shift the centre).
-const SPAWN_RAW = { x: -266, z: -15 };
+// Tsim Sha Tsui Ferry Pier plaza, in scene coords BEFORE recentering
+// (Blender rebase X 220, northing -465 -> scene Z 465). Checked against
+// the 4D tile's building footprints: open ground, 17m+ clear of the
+// nearest buildings, ~100m from the shoreline. spawnCharacter converts
+// with modelCenter, so the spawn survives the map growing.
+const SPAWN_RAW = { x: 220, z: 465 };
 
 function buildGround() {
   model.updateMatrixWorld(true);
@@ -582,18 +584,18 @@ function spawnCharacter() {
   const sz = SPAWN_RAW.z - modelCenter.z;
   charPos.set(sx, 0, sz);
   charPos.y = groundHeight(sx, sz, 50);
-  charYaw = Math.PI; // face the harbour (-X)
+  charYaw = 0; // face the harbour (south, +Z)
   charGroup.position.copy(charPos);
   charGroup.rotation.y = charYaw;
   _prevPos.copy(charPos); // so the speedometer doesn't spike on spawn
-  // camera east of the character, looking west at the podium + harbour
-  camYaw = Math.PI / 2;
+  // camera north of the character, looking south at the pier + harbour
+  camYaw = Math.PI;
   camPitch = 0.35;
   camDist = 14;
 }
 
 // ---------- walk-mode camera ----------
-let camYaw = Math.PI / 2, camPitch = 0.35, camDist = 14;
+let camYaw = Math.PI, camPitch = 0.35, camDist = 14;
 let dragging = false, lastX = 0, lastY = 0;
 
 renderer.domElement.addEventListener('pointerdown', (e) => {
