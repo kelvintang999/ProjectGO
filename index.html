@@ -587,6 +587,28 @@ function buildGround() {
       if (v.y > data[idx]) data[idx] = v.y;
     }
   }
+  // Fill cells that got no terrain vertex by diffusion from their
+  // neighbours. The 4D terrain mesh is coarse (~7m vertex spacing vs
+  // 3m cells), so most cells on that tile would otherwise be holes
+  // filled with the global minimum — and the character falls through
+  // the floor. Diffusion is safe here: the terrain is smooth, so a
+  // filled cell is close to the true surface.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let iz = 0; iz < nz; iz++) {
+      for (let ix = 0; ix < nx; ix++) {
+        const idx = iz * nx + ix;
+        if (data[idx] !== -Infinity) continue;
+        let sum = 0, n = 0;
+        if (ix > 0 && data[idx - 1] !== -Infinity) { sum += data[idx - 1]; n++; }
+        if (ix < nx - 1 && data[idx + 1] !== -Infinity) { sum += data[idx + 1]; n++; }
+        if (iz > 0 && data[idx - nx] !== -Infinity) { sum += data[idx - nx]; n++; }
+        if (iz < nz - 1 && data[idx + nx] !== -Infinity) { sum += data[idx + nx]; n++; }
+        if (n > 0) { data[idx] = sum / n; changed = true; }
+      }
+    }
+  }
   let gmin = Infinity;
   for (let i = 0; i < data.length; i++) if (data[i] !== -Infinity && data[i] < gmin) gmin = data[i];
   for (let i = 0; i < data.length; i++) if (data[i] === -Infinity) data[i] = gmin;
@@ -633,7 +655,8 @@ function groundHeight(x, z, refY) {
   // highest building hit near/below the character: lets the character
   // step onto podiums, but not pop up onto footbridges overhead.
   downRay.set(new THREE.Vector3(x, refY + 50, z), new THREE.Vector3(0, -1, 0));
-  downRay.far = 60;
+  downRay.far = refY + 60; // always reach below the ground (was a fixed
+  // 60, which at spawn refY=50 stopped 40m above the floor)
   for (const t of raycastTargets) {
     if (x < t.minX || x > t.maxX || z < t.minZ || z > t.maxZ) continue;
     const hits = downRay.intersectObject(t.mesh, false);
