@@ -42,14 +42,6 @@
     transition: opacity 0.3s, transform 0.3s; white-space: nowrap;
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  #tesla-hud {
-    position: fixed; top: 12px; right: 12px; z-index: 10; text-align: right;
-    color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.8); pointer-events: none;
-    display: none;
-  }
-  #tesla-speed { font-size: 56px; font-weight: 200; line-height: 1; letter-spacing: -1px; }
-  #tesla-unit { font-size: 13px; color: #cbd5e1; margin-top: 2px; }
-  #tesla-nav { font-size: 14px; color: #e2e8f0; margin-top: 8px; }
   #err { color: #fca5a5; }
 </style>
 </head>
@@ -67,7 +59,6 @@
     <button id="reset" class="secondary">重置視角</button>
     <button id="shadowToggle" class="secondary">陰影：開</button>
     <button id="modeToggle" class="secondary">模式：步行</button>
-    <button id="teslaToggle" class="secondary">Tesla 模式：開</button>
     <button id="nightToggle" class="secondary">夜間：關</button>
   </div>
   <input id="file" type="file" accept=".glb,.gltf" hidden>
@@ -75,11 +66,6 @@
 
 <div id="help">步行：WASD 移動 · Shift 跑 · 拖曳轉鏡頭 · 滾輪拉遠近 · 按住空白鍵飛行 · Ctrl 下降 — 飛行：WASD 飛 · Q / E 上下</div>
 <div id="toast"></div>
-<div id="tesla-hud">
-  <div id="tesla-speed">0</div>
-  <div id="tesla-unit">km/h</div>
-  <div id="tesla-nav">尖沙咀</div>
-</div>
 <div id="drop-hint">放開以載入 .glb</div>
 
 <script type="importmap">
@@ -357,12 +343,12 @@ function terrainHeight(x, z) {
 }
 
 // Raycast targets, prefiltered per query: raycasting ~500 meshes every
-// frame (21x for the ribbon alone) is what made the demo stutter — the
-// two road-network meshes have ~800k triangles between them and their
-// bounding spheres cover the whole map, so every ray tested them all.
-// Fix: (1) skip monster meshes (>50k tris — ground-level roads, the
-// heightfield already covers them), (2) test only meshes whose XZ bounds
-// contain the query point.
+// frame used to be what made the demo stutter — the two road-network
+// meshes have ~800k triangles between them and their bounding spheres
+// cover the whole map, so every ray tested them all. Fix: (1) skip
+// monster meshes (>50k tris — ground-level roads, the heightfield
+// already covers them), (2) test only meshes whose XZ bounds contain
+// the query point.
 let raycastTargets = [];
 function buildRaycastTargets() {
   raycastTargets = [];
@@ -469,97 +455,11 @@ function clampToBounds() {
   if (hit) showBoundaryToast();
 }
 
-// ---------- Tesla Reality View: blue path ribbon + HUD + night mode ----------
-// The blue ribbon is the signature element: a glowing path on the road ahead
-// of the character, draped over the ground. The HUD shows speed / heading /
-// area, Tesla-style. Night mode dims the lights for the screenshot look.
-let teslaMode = true;
+// ---------- night mode ----------
+// Night mode dims the lights for a night-time mood. (The Tesla Reality
+// View ribbon + HUD were removed at the user's request: the ribbon's
+// per-frame ground raycasts were the main cause of stutter in walk mode.)
 let nightMode = false;
-
-// ribbon: 20 segments, 40m long, 2.5m wide, fading out with distance
-const RIBBON_SEGMENTS = 20, RIBBON_LENGTH = 40, RIBBON_WIDTH = 2.5;
-const ribbonGeo = new THREE.BufferGeometry();
-{
-  const verts = new Float32Array((RIBBON_SEGMENTS + 1) * 2 * 3);
-  const colors = new Float32Array((RIBBON_SEGMENTS + 1) * 2 * 3);
-  const idx = [];
-  for (let i = 0; i < RIBBON_SEGMENTS; i++) {
-    const a = i * 2, b = i * 2 + 1, c = i * 2 + 2, d = i * 2 + 3;
-    idx.push(a, b, c, b, d, c);
-  }
-  for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
-    // fade from bright blue (near) to black (far); additive blending makes
-    // black invisible, so the ribbon dissolves into the road ahead
-    const f = 1 - i / RIBBON_SEGMENTS;
-    const r = 0.15 * f, g = 0.45 * f, b = 1.0 * f;
-    colors.set([r, g, b, r, g, b], i * 6);
-  }
-  ribbonGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3).setUsage(THREE.DynamicDrawUsage));
-  ribbonGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  ribbonGeo.setIndex(idx);
-}
-const ribbon = new THREE.Mesh(ribbonGeo, new THREE.MeshBasicMaterial({
-  vertexColors: true, transparent: true, blending: THREE.AdditiveBlending,
-  depthWrite: false, side: THREE.DoubleSide
-}));
-ribbon.renderOrder = 5;
-ribbon.frustumCulled = false;
-scene.add(ribbon);
-
-const _rFwd = new THREE.Vector3(), _rRight = new THREE.Vector3(), _rPos = new THREE.Vector3();
-function updateRibbon() {
-  if (!teslaMode || mode !== 'walk' || !model) { ribbon.visible = false; return; }
-  ribbon.visible = true;
-  _rFwd.set(Math.sin(charYaw), 0, Math.cos(charYaw));
-  _rRight.set(-_rFwd.z, 0, _rFwd.x);
-  const pos = ribbonGeo.attributes.position.array;
-  for (let i = 0; i <= RIBBON_SEGMENTS; i++) {
-    const t = (i / RIBBON_SEGMENTS) * RIBBON_LENGTH;
-    _rPos.copy(charPos).addScaledVector(_rFwd, t);
-    const y = groundHeight(_rPos.x, _rPos.z, charPos.y) + 0.15;
-    const hw = RIBBON_WIDTH / 2;
-    pos.set([
-      _rPos.x - _rRight.x * hw, y, _rPos.z - _rRight.z * hw,
-      _rPos.x + _rRight.x * hw, y, _rPos.z + _rRight.z * hw
-    ], i * 6);
-  }
-  ribbonGeo.attributes.position.needsUpdate = true;
-}
-
-// Tesla HUD: speed (from actual movement), compass heading, area name
-const teslaHud = document.getElementById('tesla-hud');
-const teslaSpeedEl = document.getElementById('tesla-speed');
-const teslaNavEl = document.getElementById('tesla-nav');
-const _prevPos = new THREE.Vector3();
-let smoothKmh = 0;
-const COMPASS = ['北', '東北', '東', '東南', '南', '西南', '西', '西北'];
-function updateTeslaHud(dt) {
-  if (!teslaMode || mode !== 'walk' || !model) { teslaHud.style.display = 'none'; return; }
-  teslaHud.style.display = 'block';
-  // speed: distance moved per second -> km/h, smoothed
-  const dist = charPos.distanceTo(_prevPos);
-  _prevPos.copy(charPos);
-  const kmh = dt > 0 ? (dist / dt) * 3.6 : 0;
-  smoothKmh += (kmh - smoothKmh) * Math.min(1, dt * 6);
-  teslaSpeedEl.textContent = Math.round(smoothKmh);
-  // heading: north is -Z in this scene (Blender northing -> glTF -Z)
-  const headingDeg = (THREE.MathUtils.radToDeg(Math.atan2(Math.sin(charYaw), -Math.cos(charYaw))) + 360) % 360;
-  const compass = COMPASS[Math.round(headingDeg / 45) % 8];
-  // area: convert back to pre-recenter scene coords (Canton Road is at
-  // raw x -266; the south tile / harbourfront is raw z > 300)
-  const rawX = charPos.x + modelCenter.x;
-  const rawZ = charPos.z + modelCenter.z;
-  let area = '尖沙咀';
-  if (Math.abs(rawX - (-266)) < 40 && Math.abs(rawZ) < 200) area = '廣東道';
-  else if (rawZ > 300) area = '尖沙咀海濱';
-  teslaNavEl.textContent = area + ' · ' + compass;
-}
-
-function setTeslaMode(on) {
-  teslaMode = on;
-  document.getElementById('teslaToggle').textContent = 'Tesla 模式：' + (on ? '開' : '關');
-}
-document.getElementById('teslaToggle').addEventListener('click', () => setTeslaMode(!teslaMode));
 
 // day / night lighting presets (textures are daytime photos, so night is a
 // dimmed mood, not true night photography)
@@ -594,7 +494,6 @@ function spawnCharacter() {
   charYaw = Math.PI; // face the harbour (-X)
   charGroup.position.copy(charPos);
   charGroup.rotation.y = charYaw;
-  _prevPos.copy(charPos); // so the speedometer doesn't spike on spawn
   // camera east of the character, looking west at the podium + harbour
   camYaw = Math.PI / 2;
   camPitch = 0.35;
@@ -845,8 +744,6 @@ function animate() {
   else if (model) updateFly(dt);
   else controls.update();
   updateShadowFocus();
-  updateRibbon();
-  updateTeslaHud(dt);
   renderer.render(scene, camera);
 
   frames++; fpsTime += dt;
