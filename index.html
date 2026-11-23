@@ -765,6 +765,168 @@ function groundHeight(x, z, refY) {
   return h;
 }
 
+// ---------- roads + building collision (baked data, loaded async) ----------
+// roads.json: 2m road-surface height grid rasterized from the government
+// road-network mesh (INFRASTRUCTURE(TB)) — the terrain DTM is too coarse
+// (~7m vertices in 4D) for smooth driving. buildings-collision.json: 2m
+// footprint grid of building walls at ground level (a cell is blocked
+// iff a wall passes through the ground band there). Both are baked in
+// scene coords for this map (2-tile TST). If the loaded model doesn't
+// match (a different .glb via ?model= or file picker), the data is
+// ignored; if the fetch fails (files not deployed yet), same fallback —
+// the page keeps working on terrain height with no collision.
+let roadGrid = null;  // {cell, originX, originZ, nx, nz, cover, heights}
+let footGrid = null;  // {cell, originX, originZ, nx, nz, bits}
+let roadDataRaw = null, footDataRaw = null, roadDataTried = false;
+let roadBlend = 0, lastRoadH = 0; // road/terrain blend for the car
+
+function b64ToBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function decodeRoadGrid(j) {
+  const cover = b64ToBytes(j.coverage);
+  const hb = b64ToBytes(j.heights);
+  const heights = new Float32Array(j.nx * j.nz).fill(NaN);
+  let k = 0;
+  for (let i = 0; i < j.nx * j.nz; i++) {
+    if (cover[i >> 3] & (1 << (i & 7))) {
+      heights[i] = (hb[k * 2] | (hb[k * 2 + 1] << 8)) * j.heightScale;
+      k++;
+    }
+  }
+  return { cell: j.cell, originX: j.originX, originZ: j.originZ,
+    nx: j.nx, nz: j.nz, cover, heights };
+}
+
+function decodeFootGrid(j) {
+  return { cell: j.cell, originX: j.originX, originZ: j.originZ,
+    nx: j.nx, nz: j.nz, bits: b64ToBytes(j.footprint) };
+}
+
+function tryActivateRoadData() {
+  if (!model || !roadDataRaw || !footDataRaw) return;
+  // baked for one map: the model centre must match (2m tolerance)
+  if (Math.abs(modelCenter.x - roadDataRaw.modelCenter.x) > 2 ||
+      Math.abs(modelCenter.z - roadDataRaw.modelCenter.z) > 2) {
+    roadGrid = null; footGrid = null;
+    return;
+  }
+  if (!roadGrid) roadGrid = decodeRoadGrid(roadDataRaw);
+  if (!footGrid) footGrid = decodeFootGrid(footDataRaw);
+}
+
+function loadRoadData() {
+  if (roadDataTried) { tryActivateRoadData(); return; }
+  roadDataTried = true;
+  Promise.all([
+    fetch('./roads.json').then((r) => { if (!r.ok) throw new Error('roads.json ' + r.status); return r.json(); }),
+    fetch('./buildings-collision.json').then((r) => { if (!r.ok) throw new Error('buildings-collision.json ' + r.status); return r.json(); }),
+  ]).then(([rj, fj]) => {
+    roadDataRaw = rj; footDataRaw = fj;
+    tryActivateRoadData();
+  }).catch((e) => {
+    console.warn('road data not loaded, driving on terrain without collision:', e);
+  });
+}
+
+// Road-surface height at (x, z), or null if off-road. Bilinear over the
+// 2m grid; at road edges the available corners are averaged (weights
+// renormalized) so the edge doesn't read as a cliff.
+function roadHeight(x, z) {
+  if (!roadGrid) return null;
+  const g = roadGrid;
+  const fx = (x - g.originX) / g.cell - 0.5;
+  const fz = (z - g.originZ) / g.cell - 0.5;
+  const ix = Math.floor(fx), iz = Math.floor(fz);
+  const tx = fx - ix, tz = fz - iz;
+  const corners = [
+    [ix, iz, (1 - tx) * (1 - tz)], [ix + 1, iz, tx * (1 - tz)],
+    [ix, iz + 1, (1 - tx) * tz], [ix + 1, iz + 1, tx * tz],
+  ];
+  let sum = 0, wsum = 0;
+  for (const [cx, cz, w] of corners) {
+    if (cx < 0 || cx >= g.nx || cz < 0 || cz >= g.nz) continue;
+    const h = g.heights[cz * g.nx + cx];
+    if (Number.isNaN(h)) continue;
+    sum += h * w; wsum += w;
+  }
+  return wsum > 0 ? sum / wsum : null;
+}
+
+// Building footprint collision: push a circle (pos.xz, radius) out of
+// blocked 2m cells. Returns true if pushed. Sliding along walls comes
+// free: the push is along the normal to the closest point.
+function collideFootprint(pos, radius) {
+  if (!footGrid) return false;
+  const g = footGrid, c = g.cell;
+  let hit = false;
+  for (let iter = 0; iter < 3; iter++) {
+    let pushed = false;
+    const ix0 = Math.floor((pos.x - radius - g.originX) / c);
+    const ix1 = Math.floor((pos.x + radius - g.originX) / c);
+    const iz0 = Math.floor((pos.z - radius - g.originZ) / c);
+    const iz1 = Math.floor((pos.z + radius - g.originZ) / c);
+    for (let iz = iz0; iz <= iz1; iz++) {
+      if (iz < 0 || iz >= g.nz) continue;
+      for (let ix = ix0; ix <= ix1; ix++) {
+        if (ix < 0 || ix >= g.nx) continue;
+        const idx = iz * g.nx + ix;
+        if (!(g.bits[idx >> 3] & (1 << (idx & 7)))) continue;
+        const x0 = g.originX + ix * c, x1 = x0 + c;
+        const z0 = g.originZ + iz * c, z1 = z0 + c;
+        const cx = Math.max(x0, Math.min(pos.x, x1));
+        const cz = Math.max(z0, Math.min(pos.z, z1));
+        const dx = pos.x - cx, dz = pos.z - cz;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= radius * radius) continue;
+        if (d2 > 1e-9) {
+          const d = Math.sqrt(d2);
+          pos.x = cx + dx / d * radius;
+          pos.z = cz + dz / d * radius;
+        } else {
+          // centre inside the cell: push out the nearest face
+          const pl = pos.x - (x0 - radius), pr = (x1 + radius) - pos.x;
+          const pn = pos.z - (z0 - radius), ps = (z1 + radius) - pos.z;
+          const m = Math.min(pl, pr, pn, ps);
+          if (m === pl) pos.x = x0 - radius;
+          else if (m === pr) pos.x = x1 + radius;
+          else if (m === pn) pos.z = z0 - radius;
+          else pos.z = z1 + radius;
+        }
+        hit = true; pushed = true;
+      }
+    }
+    if (!pushed) break;
+  }
+  return hit;
+}
+
+// Car collision: two circles at the axles (the car is 4.5m long, one
+// circle can't cover it). A push stops the car dead (v1: no bounce).
+function collideCar() {
+  if (!footGrid || !car) return;
+  const s = Math.sin(car.yaw), c = Math.cos(car.yaw);
+  let hit = false;
+  for (let iter = 0; iter < 2; iter++) {
+    let pushed = false;
+    for (const az of [1.45, -1.45]) {
+      const ax = car.pos.x + az * s, azw = car.pos.z + az * c;
+      const p = { x: ax, z: azw };
+      if (collideFootprint(p, 1.25)) {
+        car.pos.x += p.x - ax;
+        car.pos.z += p.z - azw;
+        hit = true; pushed = true;
+      }
+    }
+    if (!pushed) break;
+  }
+  if (hit) car.speed = 0;
+}
+
 // ---------- map boundary: fog-of-war walls + playable bounds ----------
 let bounds = null; // {minX, maxX, minZ, maxZ}, from the terrain heightfield
 let fogWalls = [];
@@ -1036,6 +1198,11 @@ function onLoaded(gltf, name) {
   createBench();
   createCar();
   createPierDeck();
+  // road + collision data is baked for this map: reset on every load
+  // (a different .glb must not inherit the old map's data), then
+  // (re)activate if the model matches
+  roadGrid = null; footGrid = null;
+  loadRoadData();
   setMode(mode); // apply the current mode to the fresh model
   // Mobile: Bryce loads only after the map is done, so the two big
   // .glb parses don't spike memory at the same time (iOS kills the tab).
@@ -1588,8 +1755,9 @@ function updateSitPrompt() {
 // harbour (+Z, same as the spawn). Driving is Bryce-only. State machine:
 // 'none' -> F near the driver door -> 'entering' (Entering Car one-shot)
 // -> 'driving' (Driving loop, W/S throttle, A/D steering) -> F ->
-// 'exiting' (Exiting Car one-shot) -> 'none'. No collision in v1: the
-// car drives through buildings. The driver door is on the LEFT side
+// 'exiting' (Exiting Car one-shot) -> 'none'. Collision: collideCar()
+// pushes the car out of building footprints and stops it (speed = 0).
+// The driver door is on the LEFT side
 // (left-hand drive; facing +Z, left is +X). The Mixamo enter/exit clips
 // are LHD-oriented — Exiting Car drifts +1.82m toward the character's
 // left — so LHD makes the clips exit out the driver door instead of
@@ -1751,7 +1919,8 @@ function updateCarPrompt() {
 function updateDrive(dt) {
   // arcade driving: W/S (or the touch joystick) throttle + brake/
   // reverse, A/D (or joystick left/right) steering, Shift for the
-  // faster top speed. No collision in v1.
+  // faster top speed. Building collision: collideCar() below, against
+  // the baked footprint grid (roads.json / buildings-collision.json).
   const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
   const maxSpeed = running ? CAR_MAX_FAST : CAR_MAX_SPEED;
   // throttle: keyboard wins if held, else the touch joystick (push
@@ -1786,8 +1955,20 @@ function updateDrive(dt) {
     if (car.pos.z > bounds.maxZ) { car.pos.z = bounds.maxZ; hit = true; }
     if (hit) { car.speed = 0; showBoundaryToast(); }
   }
-  // follow the ground (smoothly, like the walker)
-  const gy = groundHeight(car.pos.x, car.pos.z, car.pos.y);
+  // building collision first (stops the car at walls), then the ground:
+  // on a road, ease toward the smooth road surface; off-road, back to
+  // the terrain heightfield. The blend (plus the Y lerp below) keeps
+  // road entry/exit smooth instead of a step.
+  collideCar();
+  let gy = groundHeight(car.pos.x, car.pos.z, car.pos.y);
+  const rh = roadHeight(car.pos.x, car.pos.z);
+  if (rh !== null) {
+    lastRoadH = rh;
+    roadBlend = Math.min(1, roadBlend + dt * 8);
+  } else {
+    roadBlend = Math.max(0, roadBlend - dt * 8);
+  }
+  if (roadBlend > 0) gy = gy + (lastRoadH - gy) * roadBlend;
   car.pos.y += (gy - car.pos.y) * Math.min(1, dt * 6);
   car.group.position.copy(car.pos);
   car.group.rotation.y = car.yaw;
@@ -1903,6 +2084,10 @@ function updateWalk(dt) {
   clampToBounds();
   // don't walk through the bench (push-out, see collideBench)
   collideBench();
+  // don't walk through buildings (footprint grid; skipped while flying
+  // — fly mode is for aerial inspection — and while sitting or getting
+  // in/out of the car, so the push-out never fights an animation)
+  if (!flying && sitState === 'stand' && carState === 'none') collideFootprint(charPos, 0.4);
   // vertical + ground
   if (flying) {
     charPos.y += vy * dt;
