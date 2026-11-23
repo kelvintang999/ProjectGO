@@ -25,6 +25,10 @@
   #bar-wrap { height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; margin-top: 8px; display: none; }
   #bar { height: 100%; width: 0%; background: #38bdf8; }
   #status { font-size: 12px; color: #7dd3fc; min-height: 16px; }
+  #health-wrap { height: 8px; background: rgba(255,255,255,0.15); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  #health-fill { height: 100%; width: 100%; background: #22c55e; transition: width 0.3s; }
+  #hud #health-text { color: #e8eef7; }
+  #hud #buff-text { color: #fbbf24; min-height: 16px; }
   #help {
     position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
     color: #dbe4f0; background: rgba(10, 16, 28, 0.72); border: 1px solid rgba(255,255,255,0.14);
@@ -106,6 +110,12 @@
     border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
     display: none; pointer-events: none;
   }
+  #eat-prompt {
+    position: fixed; bottom: 202px; left: 50%; transform: translateX(-50%); z-index: 11;
+    color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
+    display: none; pointer-events: none;
+  }
   #nav-hud {
     position: fixed; top: 12px; right: 12px; z-index: 10; text-align: right;
     color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.8); pointer-events: none;
@@ -150,6 +160,7 @@
     #toast { bottom: 160px; white-space: normal; max-width: 92vw; text-align: center; }
     #sit-prompt { bottom: 260px; }
     #car-prompt { bottom: 310px; }
+    #eat-prompt { bottom: 360px; }
     #uiToggle { bottom: 100px; right: 20px; } /* above the 64px touch buttons (top edge 84px) */
     #menuBtn { bottom: 158px; right: 20px; } /* above #uiToggle (100 + 48 + 10) */
   }
@@ -181,6 +192,9 @@
   <p id="stats"></p>
   <div id="bar-wrap"><div id="bar"></div></div>
   <p id="status">正在載入模型…</p>
+  <div id="health-wrap"><div id="health-fill"></div></div>
+  <p id="health-text">體力 100/100</p>
+  <p id="buff-text"></p>
   <div class="row">
     <button id="pick">選擇 .glb 檔案</button>
     <button id="reset" class="secondary">重置視角</button>
@@ -192,16 +206,18 @@
     <button id="kickBtn" class="secondary">腿 (K)</button>
     <button id="comboBtn" class="secondary">連招 (L)</button>
     <button id="drinkBtn" class="secondary">喝水 (T)</button>
+    <button id="eatBtn" class="secondary">吃飯 (E)</button>
     <button id="sitBtn" class="secondary">坐下 (E)</button>
     <button id="carBtn" class="secondary">上車 (F)</button>
   </div>
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
 
-<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下 · F 上車 · T 喝水 · H 收起介面</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車：搖桿上推加速、左右轉向 · 右下角按鈕收起介面</span></div>
+<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下／吃飯 · F 上車 · T 喝水 · H 收起介面</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車：搖桿上推加速、左右轉向 · 右下角按鈕收起介面</span></div>
 <div id="toast"></div>
 <div id="sit-prompt"></div>
 <div id="car-prompt"></div>
+<div id="eat-prompt"></div>
 <div id="nav-hud">
   <div id="nav-speed">0</div>
   <div id="nav-unit">km/h</div>
@@ -1188,6 +1204,7 @@ document.getElementById('punchBtn').addEventListener('click', () => startAction(
 document.getElementById('kickBtn').addEventListener('click', () => startAction('kick'));
 document.getElementById('comboBtn').addEventListener('click', () => startAction('combo'));
 document.getElementById('drinkBtn').addEventListener('click', () => drinkWater());
+document.getElementById('eatBtn').addEventListener('click', () => eatFood());
 document.getElementById('sitBtn').addEventListener('click', () => toggleSit());
 document.getElementById('carBtn').addEventListener('click', () => toggleCar());
 
@@ -1196,6 +1213,9 @@ function spawnCharacter() {
   if (sitState !== 'stand') cancelSit();
   // same while driving: drop out of the car first
   if (carState !== 'none') cancelCar();
+  // a teleport is not a fall: drop any in-progress fall tracking
+  // (fallStartY lives in the food-stall section below)
+  fallStartY = null;
   const sx = SPAWN_RAW.x - modelCenter.x;
   const sz = SPAWN_RAW.z - modelCenter.z;
   charPos.set(sx, 0, sz);
@@ -1312,6 +1332,7 @@ function onLoaded(gltf, name) {
   spawnCharacter();
   createBench();
   createCar();
+  createStall();
   createPierDeck();
   // road + collision data is baked for this map: reset on every load
   // (a different .glb must not inherit the old map's data), then
@@ -1591,7 +1612,7 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyJ') startAction('punch');
     else if (e.code === 'KeyK') startAction('kick');
     else if (e.code === 'KeyL') startAction('combo');
-    else if (e.code === 'KeyE') toggleSit();
+    else if (e.code === 'KeyE') { toggleSit(); eatFood(); } // E is contextual: bench -> sit, stall -> eat (their ranges never overlap)
     else if (e.code === 'KeyF') toggleCar();
     else if (e.code === 'KeyT') drinkWater();
     else if (e.code === 'KeyH') setUICollapsed(!uiCollapsed);
@@ -2139,6 +2160,203 @@ function updateCarPrompt() {
   }
 }
 
+// ---------- food stall + eating (Sleeping Dogs style) ----------
+// One procedural dai pai dong on the pier plaza, 8m east of the spawn
+// (bench is 6m south, car 9m north — the three never crowd each other),
+// front facing the spawn (-X). Eating restores health and gives a 60s
+// run-speed buff, like food stalls in Sleeping Dogs. The Eating clip
+// (CMU 79_15 retarget) lands later from the Blender batch; until then
+// the effects still apply with no animation (console.warn only).
+let stall = null; // { group, pos, yaw }
+const EAT_RANGE = 2.5;
+const EAT_HEAL = 25;
+const EAT_COOLDOWN = 3; // seconds between meals (anti-spam; matches the Eating clip length)
+const SPEED_BUFF_MULT = 1.2;
+const SPEED_BUFF_SECS = 60;
+const HEALTH_MAX = 100;
+const FALL_DAMAGE_MIN = 8;   // drops of 8m or less are free
+const FALL_DAMAGE_PER_M = 3; // health lost per metre past the free drop
+const FALL_DAMAGE_CAP = 50;  // max health lost in a single fall
+let health = HEALTH_MAX;
+let speedBuffUntil = 0; // clock.elapsedTime when the run-speed buff ends
+let lastEatAt = -EAT_COOLDOWN;
+let fallStartY = null; // takeoff height while airborne (null = grounded)
+
+function createStall() {
+  if (stall) { scene.remove(stall.group); stall = null; }
+  if (!model) return;
+  // stall 8m east of the spawn, on the open plaza; front faces the
+  // spawn (world -X), so the group yaw is -PI/2 (local +Z -> -X).
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const tx = sx + 8, tz = sz;
+  const ty = groundHeight(tx, tz, 50);
+  const g = new THREE.Group();
+  const steel = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.4, metalness: 0.6 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 });
+  const green = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 });
+  const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2f3336, roughness: 0.5, metalness: 0.6 });
+  const red = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.7 });
+  const box = (w, h, d, m, x, y, z, rx = 0) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    b.rotation.x = rx;
+    g.add(b);
+    return b;
+  };
+  const cyl = (rT, rB, h, m, x, y, z) => {
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(rT, rB, h, 12), m);
+    c.position.set(x, y, z);
+    g.add(c);
+    return c;
+  };
+  // canopy: flat green roof on 4 poles, slight tilt so rain would run off
+  for (const dx of [-1.5, 1.5]) for (const dz of [-1.05, 1.05]) cyl(0.04, 0.04, 2.4, darkMetal, dx, 1.2, dz);
+  box(3.4, 0.08, 2.4, green, 0, 2.45, 0, 0.08);
+  // front counter (steel + wood top) + back counter
+  box(2.6, 0.9, 0.7, steel, 0, 0.45, 0.2);
+  box(2.7, 0.06, 0.8, wood, 0, 0.93, 0.2);
+  box(2.6, 0.9, 0.5, steel, 0, 0.45, -0.85);
+  // two pots on the counter
+  cyl(0.16, 0.14, 0.22, darkMetal, -0.8, 1.07, 0.2);
+  cyl(0.16, 0.14, 0.22, darkMetal, 0.8, 1.07, 0.2);
+  // two red plastic stools in front of the counter
+  for (const dx of [-0.7, 0.7]) {
+    cyl(0.03, 0.03, 0.45, darkMetal, dx, 0.225, 1.0);
+    cyl(0.18, 0.18, 0.05, red, dx, 0.47, 1.0);
+  }
+  // sign: canvas texture "大排檔", mounted on the canopy's front edge
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#b91c1c'; ctx.fillRect(0, 0, 256, 64);
+  ctx.fillStyle = '#fde047';
+  ctx.font = 'bold 40px "PingFang TC", "Microsoft JhengHei", sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('大排檔', 128, 34);
+  const signTex = new THREE.CanvasTexture(c);
+  signTex.colorSpace = THREE.SRGBColorSpace;
+  const sign = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.2, 0.55),
+    new THREE.MeshBasicMaterial({ map: signTex, side: THREE.DoubleSide })
+  );
+  sign.position.set(0, 2.6, 1.18);
+  g.add(sign);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(tx, ty, tz);
+  g.rotation.y = -Math.PI / 2;
+  scene.add(g);
+  stall = { group: g, pos: new THREE.Vector3(tx, ty, tz), yaw: -Math.PI / 2 };
+}
+
+// Stall collision: same push-out as collideBench, but the stall is
+// rotated (front faces -X), so the test runs in the stall's local
+// frame. Skipped while sitting and while flying above the sign.
+function collideStall() {
+  if (!stall || sitState !== 'stand') return;
+  if (charPos.y > stall.pos.y + 3.0) return; // flying over the sign
+  const dx = charPos.x - stall.pos.x, dz = charPos.z - stall.pos.z;
+  const c = Math.cos(stall.yaw), s = Math.sin(stall.yaw);
+  // world -> local (rotation.y = yaw maps local +Z to world -X)
+  const lx = dx * c - dz * s;
+  const lz = dx * s + dz * c;
+  const hw = 1.7 + 0.4, hd = 1.2 + 0.4; // canopy footprint + character radius
+  if (Math.abs(lx) > hw || Math.abs(lz) > hd) return; // outside
+  const px = hw - Math.abs(lx), pz = hd - Math.abs(lz);
+  let nx = lx, nz = lz;
+  if (px <= pz) nx = Math.sign(lx || 1) * hw;
+  else nz = Math.sign(lz || 1) * hd;
+  // local -> world
+  charPos.x = stall.pos.x + nx * c + nz * s;
+  charPos.z = stall.pos.z - nx * s + nz * c;
+}
+
+const healthFillEl = document.getElementById('health-fill');
+const healthTextEl = document.getElementById('health-text');
+const buffTextEl = document.getElementById('buff-text');
+function updateHealthUI() {
+  healthFillEl.style.width = (health / HEALTH_MAX * 100) + '%';
+  healthFillEl.style.background = health < 30 ? '#ef4444' : (health < 60 ? '#f59e0b' : '#22c55e');
+  healthTextEl.textContent = '體力 ' + Math.round(health) + '/' + HEALTH_MAX;
+}
+
+let lastBuffText = null;
+function updateBuffUI() {
+  // per-frame (called from animate): the countdown ticks every second
+  const left = speedBuffUntil - clock.elapsedTime;
+  const text = left > 0 ? '跑速提升：' + Math.ceil(left) + ' 秒' : '';
+  if (text !== lastBuffText) {
+    lastBuffText = text;
+    buffTextEl.textContent = text;
+  }
+}
+
+function applyEatEffects() {
+  health = Math.min(HEALTH_MAX, health + EAT_HEAL);
+  speedBuffUntil = clock.elapsedTime + SPEED_BUFF_SECS;
+  lastEatAt = clock.elapsedTime;
+  updateHealthUI();
+  updateBuffUI();
+  showToast('吃飽了！跑速提升 60 秒', 3000);
+}
+
+function eatFood() {
+  // E key / button near the food stall. Guards mirror drinkWater
+  // (walk mode, on foot, not sitting/driving, no one-shot playing).
+  // Unlike drinking, eating works without Bryce: the effects apply
+  // even before the Eating clip lands (console.warn only).
+  if (!stall) return;
+  if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return;
+  if (carState !== 'none') return;
+  const d = Math.hypot(charPos.x - stall.pos.x, charPos.z - stall.pos.z);
+  if (d > EAT_RANGE) return;
+  if (bryce && bryce.oneShot) return; // wait for a move to finish
+  if (clock.elapsedTime - lastEatAt < EAT_COOLDOWN) return;
+  if (bryce && bryce.clips['Eating']) {
+    // movement locks while the clip plays (updateWalk zeroes move
+    // while bryce.oneShot is set, same as Drinking)
+    playOneShot('Eating');
+  } else {
+    console.warn('Eating clip not loaded yet — applying effects without animation');
+  }
+  applyEatEffects();
+}
+
+const eatPromptEl = document.getElementById('eat-prompt');
+let lastEatPrompt = null;
+function updateEatPrompt() {
+  let text = '';
+  if (stall && mode === 'walk' && sitState === 'stand' && carState === 'none' && !flying) {
+    const d = Math.hypot(charPos.x - stall.pos.x, charPos.z - stall.pos.z);
+    if (d <= EAT_RANGE) text = '按 E 吃飯';
+  }
+  if (text !== lastEatPrompt) {
+    lastEatPrompt = text;
+    eatPromptEl.textContent = text;
+    eatPromptEl.style.display = text ? 'block' : 'none';
+  }
+}
+
+// Fall damage: called from updateWalk when a walk-mode fall lands.
+// Drops of 8m or less are free; past that, 3 health per metre, capped
+// at 50 per fall. At 0 health the character respawns at the spawn
+// with full health (the buff, if any, is kept).
+function applyFallDamage(drop) {
+  const dmg = Math.min(FALL_DAMAGE_CAP, Math.round((drop - FALL_DAMAGE_MIN) * FALL_DAMAGE_PER_M));
+  health -= dmg;
+  if (health <= 0) {
+    health = 0;
+    updateHealthUI();
+    spawnCharacter(); // teleports home and resets the fall tracker
+    health = HEALTH_MAX;
+    updateHealthUI();
+    showToast('你摔倒了，已回到出生點', 4000);
+  } else {
+    updateHealthUI();
+    showToast('摔了一跤！體力 -' + dmg, 3000);
+  }
+}
+
 function updateDrive(dt) {
   // arcade driving: W/S (or the touch joystick) throttle + brake/
   // reverse, A/D (or joystick left/right) steering, Shift for the
@@ -2291,7 +2509,10 @@ function updateWalk(dt) {
     // magnitude >= 1, so it stays full speed)
     const mag = Math.min(1, move.length());
     move.normalize();
-    const speed = (flying ? (running ? 60 : 30) : (running ? 25 : 6)) * mag;
+    // food-stall speed buff: run speed x1.2 while it lasts (walk speed
+    // and flight are unaffected)
+    const runSpeed = (clock.elapsedTime < speedBuffUntil) ? 25 * SPEED_BUFF_MULT : 25;
+    const speed = (flying ? (running ? 60 : 30) : (running ? runSpeed : 6)) * mag;
     charPos.addScaledVector(move, speed * dt);
     // face the movement direction (smooth turn)
     const targetYaw = Math.atan2(move.x, move.z);
@@ -2307,19 +2528,43 @@ function updateWalk(dt) {
   clampToBounds();
   // don't walk through the bench (push-out, see collideBench)
   collideBench();
+  // don't walk through the food stall (push-out, see collideStall)
+  collideStall();
   // don't walk through buildings (footprint grid; skipped while flying
   // — fly mode is for aerial inspection — and while sitting or getting
   // in/out of the car, so the push-out never fights an animation)
   if (!flying && sitState === 'stand' && carState === 'none') collideFootprint(charPos, 0.4);
-  // vertical + ground
+  // vertical + ground (gy is reused by the fall check below, so it is
+  // hoisted — the groundHeight calls keep their original order and refY)
+  let gy;
   if (flying) {
     charPos.y += vy * dt;
-    const gy = groundHeight(charPos.x, charPos.z, charPos.y);
+    gy = groundHeight(charPos.x, charPos.z, charPos.y);
     if (charPos.y <= gy) { charPos.y = gy; if (vy <= 0) flying = false; }
   } else {
-    const gy = groundHeight(charPos.x, charPos.z, charPos.y);
+    gy = groundHeight(charPos.x, charPos.z, charPos.y);
     const rate = gy < charPos.y ? 12 : 6;
     charPos.y += (gy - charPos.y) * Math.min(1, dt * rate);
+  }
+  // fall damage: on foot in walk mode only (not flying, sitting or
+  // driving). The walker is ground-lerped, not ballistic, so
+  // "airborne" means the ground fell away underfoot — a podium edge —
+  // faster than the lerp can follow. Takeoff height is the highest
+  // point while airborne; landing more than 8m below it hurts.
+  // Mode-switch teleports and respawns reset the tracker (see
+  // spawnCharacter), so they never count as falls.
+  if (!flying && sitState === 'stand' && carState === 'none') {
+    const gap = charPos.y - gy;
+    if (gap > 0.5) {
+      if (fallStartY === null) fallStartY = charPos.y;
+      else fallStartY = Math.max(fallStartY, charPos.y);
+    } else if (fallStartY !== null) {
+      const drop = fallStartY - gy;
+      fallStartY = null;
+      if (drop > FALL_DAMAGE_MIN) applyFallDamage(drop);
+    }
+  } else {
+    fallStartY = null;
   }
   charGroup.position.copy(charPos);
   charGroup.rotation.y = charYaw;
@@ -2386,6 +2631,8 @@ function animate() {
   if (bryce && bryce.mixer) bryce.mixer.update(dt);
   updateSitPrompt();
   updateCarPrompt();
+  updateEatPrompt();
+  updateBuffUI();
   updateShadowFocus();
   updateNavHud(dt);
   renderer.render(scene, camera);
