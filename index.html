@@ -1589,7 +1589,7 @@ const CAR_RANGE = 3;
 const CAR_ACCEL = 8, CAR_BRAKE = 20, CAR_DRAG = 1.2;
 const CAR_MAX_SPEED = 15, CAR_MAX_FAST = 25, CAR_MAX_REVERSE = 5;
 const CAR_DOOR_LOCAL = new THREE.Vector3(-1.15, 0, 0.4);
-const CAR_SEAT_LOCAL = new THREE.Vector3(-0.45, 0.35, 0.3);
+const CAR_SEAT_LOCAL = new THREE.Vector3(-0.45, 0.15, 0.3); // seat low: seated head ~1.40, roof underside 1.47
 
 function carLocalToWorld(local) {
   // rotate a car-local offset by the car's yaw, add the car position
@@ -1610,7 +1610,7 @@ function createCar() {
   const cy = groundHeight(sx, sz, 50);
   const g = new THREE.Group();
   const paint = new THREE.MeshStandardMaterial({ color: 0x2a3542, roughness: 0.35, metalness: 0.6 });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x0e151c, roughness: 0.1, metalness: 0.8 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x0e151c, roughness: 0.1, metalness: 0.8, transparent: true, opacity: 0.45, depthWrite: false });
   const tyre = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
   const light = new THREE.MeshStandardMaterial({ color: 0xfff6c9, roughness: 0.3, emissive: 0x555533 });
   const box = (w, h, d, m, x, y, z) => {
@@ -1620,16 +1620,27 @@ function createCar() {
     return b;
   };
   box(1.9, 0.7, 4.5, paint, 0, 0.65, 0);        // body
-  box(1.7, 0.6, 2.2, paint, 0, 1.25, -0.2);     // cabin
-  box(1.74, 0.45, 2.0, glass, 0, 1.25, -0.2);   // window band
+  // cabin is open (roof + pillars), not a solid box — the driver must stay visible
+  box(1.7, 0.08, 2.2, paint, 0, 1.51, -0.2);    // roof (underside 1.47)
+  box(0.08, 0.52, 0.08, paint, -0.8, 1.21, -1.24); // pillars
+  box(0.08, 0.52, 0.08, paint, 0.8, 1.21, -1.24);
+  box(0.08, 0.52, 0.08, paint, -0.8, 1.21, 0.84);
+  box(0.08, 0.52, 0.08, paint, 0.8, 1.21, 0.84);
+  box(1.74, 0.45, 2.0, glass, 0, 1.25, -0.2);   // window band (transparent)
   box(0.35, 0.18, 0.06, light, -0.6, 0.7, 2.26); // headlights
   box(0.35, 0.18, 0.06, light, 0.6, 0.7, 2.26);
   const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.25, 16);
+  const hubGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.27, 12);
+  const hubMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.4, metalness: 0.7 });
   for (const [wx, wz] of [[-0.85, 1.45], [0.85, 1.45], [-0.85, -1.45], [0.85, -1.45]]) {
     const w = new THREE.Mesh(wheelGeo, tyre);
     w.rotation.z = Math.PI / 2;
     w.position.set(wx, 0.35, wz);
     g.add(w);
+    const hub = new THREE.Mesh(hubGeo, hubMat);
+    hub.rotation.z = Math.PI / 2;
+    hub.position.set(wx, 0.35, wz);
+    g.add(hub);
   }
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   g.position.set(sx, cy, sz);
