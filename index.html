@@ -1589,20 +1589,23 @@ function updateSitPrompt() {
 // 'none' -> F near the driver door -> 'entering' (Entering Car one-shot)
 // -> 'driving' (Driving loop, W/S throttle, A/D steering) -> F ->
 // 'exiting' (Exiting Car one-shot) -> 'none'. No collision in v1: the
-// car drives through buildings. The driver door is on the right side
-// (Hong Kong right-hand drive; facing +Z, right is -X).
+// car drives through buildings. The driver door is on the LEFT side
+// (left-hand drive; facing +Z, left is +X). The Mixamo enter/exit clips
+// are LHD-oriented — Exiting Car drifts +1.82m toward the character's
+// left — so LHD makes the clips exit out the driver door instead of
+// phasing through to the passenger side (measured 2026-11-23).
 let car = null; // { group, pos, yaw, speed }
 let carState = 'none';
 const CAR_RANGE = 3;
 const CAR_ACCEL = 8, CAR_BRAKE = 20, CAR_DRAG = 1.2;
 const CAR_MAX_SPEED = 15, CAR_MAX_FAST = 25, CAR_MAX_REVERSE = 5;
-const CAR_DOOR_LOCAL = new THREE.Vector3(-1.15, 0, 0.4);
+const CAR_DOOR_LOCAL = new THREE.Vector3(1.15, 0, 0.4);
 // Entering Car's root motion carries the character +1.76m forward (measured
 // headlessly, 2026-11-23), so the enter starts 1.76m BEHIND the door: the
 // clip then walks him exactly to the door instead of past the front bumper.
 // Range check still uses the door; only the snap point is offset.
-const CAR_ENTER_START_LOCAL = new THREE.Vector3(-1.15, 0, -1.36);
-const CAR_SEAT_LOCAL = new THREE.Vector3(-0.45, 0, 0.3); // seat at ground: measured seated headtop 1.420, roof underside 1.47 (5cm margin)
+const CAR_ENTER_START_LOCAL = new THREE.Vector3(1.15, 0, -1.36);
+const CAR_SEAT_LOCAL = new THREE.Vector3(0.45, 0, 0.3); // seat at ground: measured seated headtop 1.420, roof underside 1.47 (5cm margin)
 
 function carLocalToWorld(local) {
   // rotate a car-local offset by the car's yaw, add the car position
