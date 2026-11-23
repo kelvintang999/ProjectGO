@@ -179,6 +179,15 @@
     #touch-ui { display: block; }
     .kb-help { display: none; }
     .touch-help { display: inline; }
+    /* portrait phones: hide the top-centre credit (attribution stays on
+       the menu / quality screens) and shrink the speed readout so the
+       top row stops colliding at 360-390px wide */
+    #credit { display: none; }
+    #nav-speed { font-size: 36px; }
+    #nav-nav { font-size: 12px; margin-top: 4px; }
+    /* touch buttons 64px -> 56px: three 64px buttons + joystick nearly
+       fill a 360px screen; 56px leaves breathing room */
+    .touch-btn { width: 56px; height: 56px; font-size: 15px; }
     #help { bottom: 210px; white-space: normal; max-width: 92vw; text-align: center; }
     #toast { bottom: 160px; white-space: normal; max-width: 92vw; text-align: center; }
     #sit-prompt { bottom: 260px; }
@@ -186,7 +195,7 @@
     #eat-prompt { bottom: 360px; }
     #sleep-prompt { bottom: 410px; }
     #bike-prompt { bottom: 460px; }
-    #uiToggle { bottom: 100px; right: 20px; } /* above the 64px touch buttons (top edge 84px) */
+    #uiToggle { bottom: 100px; right: 20px; } /* above the 56px touch buttons on mobile (top edge 76px) */
     #menuBtn { bottom: 158px; right: 20px; } /* above #uiToggle (100 + 48 + 10) */
   }
   #err { color: #fca5a5; }
@@ -380,7 +389,7 @@ const dropHint = document.getElementById('drop-hint');
 
 // Build label (test 11⑩: nothing on the page showed the version).
 // Shown on the main menu + the HUD stats line; bump on every push.
-const BUILD_VERSION = '2026-11-23-4';
+const BUILD_VERSION = '2026-11-23-5';
 document.getElementById('version-menu').textContent = '版本 ' + BUILD_VERSION;
 
 // ---------- renderer / scene ----------
@@ -1537,20 +1546,27 @@ function spawnCharacter() {
 }
 
 // ---------- walk-mode camera ----------
+// Camera drag tracks its own pointerId: a second finger (e.g. the
+// joystick thumb) must neither hijack the drag nor kill it on release.
 let camYaw = Math.PI, camPitch = 0.35, camDist = 14;
-let dragging = false, lastX = 0, lastY = 0;
+let dragging = false, dragId = null, lastX = 0, lastY = 0;
 
 renderer.domElement.addEventListener('pointerdown', (e) => {
-  if (mode !== 'walk') return;
-  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  if (mode !== 'walk' || dragging) return;
+  dragging = true; dragId = e.pointerId; lastX = e.clientX; lastY = e.clientY;
 });
 window.addEventListener('pointermove', (e) => {
-  if (!dragging || mode !== 'walk') return;
+  if (!dragging || e.pointerId !== dragId || mode !== 'walk') return;
   camYaw -= (e.clientX - lastX) * 0.005;
   camPitch = THREE.MathUtils.clamp(camPitch + (e.clientY - lastY) * 0.004, 0.08, inRoom ? 0.25 : 1.2);
   lastX = e.clientX; lastY = e.clientY;
 });
-window.addEventListener('pointerup', () => { dragging = false; });
+function endCamDrag(e) {
+  if (e.pointerId !== dragId) return;
+  dragging = false; dragId = null;
+}
+window.addEventListener('pointerup', endCamDrag);
+window.addEventListener('pointercancel', endCamDrag);
 renderer.domElement.addEventListener('wheel', (e) => {
   if (mode !== 'walk') return;
   camDist = THREE.MathUtils.clamp(camDist + e.deltaY * 0.01, 2, inRoom ? 3.5 : 40);
@@ -1598,6 +1614,7 @@ function setMode(m) {
   // freeze the lying pose)
   if (sleepState !== 'awake') cancelSleep();
   mode = m;
+  syncTouchFlyButtons();
   // first-time hint: name the two nearest interactions (car + bench)
   if (m === 'walk' && !walkHintShown) {
     walkHintShown = true;
@@ -2177,6 +2194,27 @@ function holdButton(id, set) {
 holdButton('btn-run', (v) => { touchRun = v; });
 holdButton('btn-up', (v) => { touchFlyUp = v; });
 holdButton('btn-down', (v) => { touchFlyDown = v; });
+
+// 升／降 are the mobile Space/Ctrl and only do anything in walk mode
+// (updateWalk reads touchFlyUp/touchFlyDown; fly mode is OrbitControls
+// and never reads them). Show them in walk mode, hide them in fly mode
+// so they never sit on screen as dead buttons; hiding also clears any
+// held state so a stuck flag can't re-trigger flying on mode switch.
+function syncTouchFlyButtons() {
+  const show = mode === 'walk';
+  for (const id of ['btn-up', 'btn-down']) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = show ? '' : 'none';
+  }
+  if (!show) {
+    touchFlyUp = false; touchFlyDown = false;
+    for (const id of ['btn-up', 'btn-down']) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('on');
+    }
+  }
+}
+syncTouchFlyButtons();
 
 const clock = new THREE.Clock();
 let frames = 0, fpsTime = 0;
