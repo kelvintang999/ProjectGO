@@ -1402,6 +1402,7 @@ function onLoaded(gltf, name) {
   createStall();
   createRoom();
   createBed();
+  createPet();
   createPierDeck();
   // road + collision data is baked for this map: reset on every load
   // (a different .glb must not inherit the old map's data), then
@@ -2153,6 +2154,161 @@ function updateNpcs(dt) {
     }
     p.set(nx, groundHeight(nx, nz, p.y), nz);
   }
+}
+
+// ---------- pet dog (v1: procedural geometric dog, follows the player) ----------
+// No external model: the dog is built from primitives (body, head, snout,
+// floppy ears, 4 legs, tail), ~0.6m long, brown/tan. A real model can swap
+// in later by replacing createPet()'s geometry — the follow logic only
+// touches pet.group / pet.legs / pet.ears / pet.tail.
+// Follow: target = 1.5m behind the player + 0.5m to the player's right.
+// The dog runs slightly faster than the player when far behind, stops
+// within 1m, and snaps back if separated by >30m (teleport / respawn /
+// dismount far away). It stays put while the player drives, rides, or is
+// in fly mode, and catches up afterwards. No collision in v1.
+const PET_FOLLOW_BACK = 1.5;   // metres behind the player
+const PET_FOLLOW_SIDE = 0.5;   // metres to the player's right
+const PET_STOP_DIST = 1.0;     // stop and idle within this of the target
+const PET_SNAP_DIST = 30;      // snap back if further than this (horizontal)
+const PET_MIN_SPEED = 2.5;     // m/s, amble when the player is idle
+const PET_MAX_SPEED = 32;      // m/s, must outrun a buffed run (30 m/s)
+const PET_CATCHUP_MULT = 1.35; // dog speed = player speed x this, clamped
+
+let pet = null; // { group, yaw, legs: {fl,fr,rl,rr}, ears: {l,r}, tail, phase, moving }
+let _petPrevPlayer = new THREE.Vector3(); // for estimating player speed
+let _petPlayerSpeed = 0; // smoothed player horizontal speed, m/s
+
+function createPet() {
+  if (pet) { scene.remove(pet.group); pet = null; }
+  if (!model) return;
+  // spawn beside the player (offset so it is not on top of the spawn)
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const px = sx + 1.5, pz = sz + 1.2;
+  const g = new THREE.Group();
+  const tan = new THREE.MeshStandardMaterial({ color: 0xb08954, roughness: 0.9 });
+  const brown = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.9 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 });
+  const mesh = (geo, m, x, y, z, parent = g) => {
+    const o = new THREE.Mesh(geo, m);
+    o.position.set(x, y, z);
+    o.castShadow = false; // small prop — skip the shadow pass for perf
+    parent.add(o);
+    return o;
+  };
+  // body: 0.22w x 0.22h x 0.5d, bottom at leg-top height (0.24m)
+  mesh(new THREE.BoxGeometry(0.22, 0.22, 0.5), tan, 0, 0.35, 0);
+  // head + snout + nose at the front (+Z)
+  mesh(new THREE.BoxGeometry(0.2, 0.2, 0.22), tan, 0, 0.46, 0.32);
+  mesh(new THREE.BoxGeometry(0.12, 0.1, 0.14), brown, 0, 0.42, 0.47);
+  mesh(new THREE.BoxGeometry(0.06, 0.05, 0.03), dark, 0, 0.44, 0.545);
+  // floppy ears: pivot at the top of each ear so they can flop; the mesh
+  // hangs down (-y) and tilts slightly outward (rotation.z)
+  const ears = {};
+  for (const [key, side] of [['l', -1], ['r', 1]]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.11, 0.54, 0.30);
+    pivot.rotation.z = side * 0.15;
+    mesh(new THREE.BoxGeometry(0.04, 0.18, 0.12), brown, 0, -0.09, 0, pivot);
+    g.add(pivot);
+    ears[key] = pivot;
+  }
+  // legs: pivot at the shoulder/hip (top), mesh hangs down so the pivot
+  // rotation.x swings the foot forward/back
+  const legs = {};
+  for (const [key, lx, lz] of [['fl', -0.08, 0.17], ['fr', 0.08, 0.17], ['rl', -0.08, -0.17], ['rr', 0.08, -0.17]]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(lx, 0.24, lz);
+    mesh(new THREE.BoxGeometry(0.07, 0.24, 0.07), tan, 0, -0.12, 0, pivot);
+    g.add(pivot);
+    legs[key] = pivot;
+  }
+  // tail: pivot at the rear, raised ~30 deg (rotation.x), wags via rotation.y
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.42, -0.26);
+  tail.rotation.x = -0.5;
+  mesh(new THREE.BoxGeometry(0.05, 0.05, 0.3), brown, 0, 0.06, -0.15, tail);
+  g.add(tail);
+  g.position.set(px, groundHeight(px, pz, 50), pz);
+  g.rotation.y = 0; // face the harbour (+Z), like the player
+  scene.add(g);
+  pet = { group: g, yaw: 0, legs, ears, tail, phase: 0, moving: false };
+  _petPrevPlayer.copy(charPos);
+  _petPlayerSpeed = 0;
+}
+
+function updatePet(dt) {
+  // called every frame from animate(), right after updateNpcs(dt)
+  if (!pet || !model) return;
+  // estimate the player's horizontal speed from frame-to-frame movement
+  const rawSpeed = charPos.distanceTo(_petPrevPlayer) / Math.max(dt, 0.001);
+  _petPrevPlayer.copy(charPos);
+  // smooth it — a teleport spikes the raw reading for one frame
+  _petPlayerSpeed += (Math.min(rawSpeed, 60) - _petPlayerSpeed) * Math.min(1, dt * 8);
+
+  const p = pet.group.position;
+  // follow target: behind the player, slightly to the player's right
+  const fx = Math.sin(charYaw), fz = Math.cos(charYaw); // player forward
+  const rx = Math.cos(charYaw), rz = -Math.sin(charYaw); // player right
+  const tx = charPos.x - fx * PET_FOLLOW_BACK + rx * PET_FOLLOW_SIDE;
+  const tz = charPos.z - fz * PET_FOLLOW_BACK + rz * PET_FOLLOW_SIDE;
+
+  // snap back if separated (respawn / teleport / dismount far away);
+  // horizontal distance only — the room sits at y=300 above the spawn
+  // and the dog should wait underneath, not chase the altitude
+  const dxp = charPos.x - p.x, dzp = charPos.z - p.z;
+  if (Math.hypot(dxp, dzp) > PET_SNAP_DIST) {
+    p.set(tx, groundHeight(tx, tz, 50), tz);
+    pet.yaw = charYaw;
+    pet.group.rotation.y = charYaw;
+  }
+
+  // stay put while the player drives, rides, or flies the camera — the
+  // dog catches up once the player is back on foot. (Flying on foot
+  // with Space held is fine: charPos stays on the ground plane and the
+  // dog just follows the XZ position below.)
+  const parked = mode !== 'walk' || carState !== 'none' || bikeState !== 'none';
+  const dx = tx - p.x, dz = tz - p.z;
+  const dist = Math.hypot(dx, dz);
+  pet.moving = !parked && dist > PET_STOP_DIST;
+  if (pet.moving) {
+    // face the movement direction (shortest-arc lerp, same as NPCs)
+    const targetYaw = Math.atan2(dx, dz);
+    let d = targetYaw - pet.yaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    pet.yaw += d * Math.min(1, dt * 8);
+    pet.group.rotation.y = pet.yaw;
+    // run slightly faster than the player so it catches up, but never
+    // overshoot the target in one step
+    const speed = THREE.MathUtils.clamp(_petPlayerSpeed * PET_CATCHUP_MULT, PET_MIN_SPEED, PET_MAX_SPEED);
+    const step = Math.min(speed * dt, dist);
+    p.x += (dx / dist) * step;
+    p.z += (dz / dist) * step;
+    pet.phase += dt * (2 + speed * 0.55); // stride rate scales with speed
+  }
+  // stay on the ground; add a small bob while moving
+  p.y = groundHeight(p.x, p.z, p.y) + (pet.moving ? Math.abs(Math.sin(pet.phase)) * 0.02 : 0);
+  animatePet(dt);
+}
+
+function animatePet(dt) {
+  // legs: diagonal pairs swing in opposition while moving, ease back to
+  // 0 when idle; ears flop a little while running; the tail always wags
+  // (faster + wider while moving)
+  const swing = pet.moving ? Math.sin(pet.phase) * 0.6 : 0;
+  const k = Math.min(1, dt * 10); // ease rate back to rest pose
+  const m = pet.moving ? 1 : k; // snap to the swing while moving, ease when idle
+  pet.legs.fl.rotation.x += (swing - pet.legs.fl.rotation.x) * m;
+  pet.legs.rr.rotation.x += (swing - pet.legs.rr.rotation.x) * m;
+  pet.legs.fr.rotation.x += (-swing - pet.legs.fr.rotation.x) * m;
+  pet.legs.rl.rotation.x += (-swing - pet.legs.rl.rotation.x) * m;
+  const flop = pet.moving ? Math.sin(pet.phase) * 0.12 : 0;
+  pet.ears.l.rotation.x += (flop - pet.ears.l.rotation.x) * m;
+  pet.ears.r.rotation.x += (flop - pet.ears.r.rotation.x) * m;
+  const wagSpeed = pet.moving ? 11 : 6;
+  const wagAmp = pet.moving ? 0.5 : 0.3;
+  pet.tail.rotation.y = Math.sin(clock.elapsedTime * wagSpeed) * wagAmp;
 }
 
 // ---------- bench + sitting (Mixamo Sitting / Sitting Idle / Stand Up) ----------
@@ -3648,6 +3804,7 @@ function animate() {
   updateFerry(dt, clock.elapsedTime);
   if (bryce && bryce.mixer) bryce.mixer.update(dt);
   updateNpcs(dt);
+  updatePet(dt);
   updateSitPrompt();
   updateCarPrompt();
   updateBikePrompt();
