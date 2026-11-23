@@ -447,7 +447,7 @@ const dropHint = document.getElementById('drop-hint');
 
 // Build label (test 11⑩: nothing on the page showed the version).
 // Shown on the main menu + the HUD stats line; bump on every push.
-const BUILD_VERSION = '2026-11-23-7';
+const BUILD_VERSION = '2026-11-23-8';
 document.getElementById('version-menu').textContent = '版本 ' + BUILD_VERSION;
 
 // ---------- renderer / scene ----------
@@ -1898,7 +1898,7 @@ function shouldAutoLite() {
   return isMobile;
 }
 function loadRecovery(target) {
-  const file = target === 'lite' ? './full_tst_tile_lite.glb' : './full_tst_tile_ulite.glb';
+  const file = target === 'lite' ? 'https://pub-416445574a884243bd824c17d0b5a289.r2.dev/full_tst_tile_lite.glb' : 'https://pub-416445574a884243bd824c17d0b5a289.r2.dev/full_tst_tile_ulite.glb';
   loadFromUrl(file, file.slice(2));
 }
 if (modelParam) {
@@ -1915,7 +1915,7 @@ if (modelParam) {
     if (shouldAutoLite()) {
       choiceEl.style.display = 'none';
       showToast('已自動選擇輕量畫質', 3000);
-      tryCandidates(['./full_tst_tile_ulite.glb', './full_tst_tile_lite.glb', './full_tst_tile.glb']);
+      tryCandidates(['https://pub-416445574a884243bd824c17d0b5a289.r2.dev/full_tst_tile_ulite.glb', 'https://pub-416445574a884243bd824c17d0b5a289.r2.dev/full_tst_tile_lite.glb', 'https://pub-416445574a884243bd824c17d0b5a289.r2.dev/full_tst_tile.glb']);
       syncZoomLock();
       return;
     }
@@ -1924,12 +1924,12 @@ if (modelParam) {
   });
   document.getElementById('qc-lite').addEventListener('click', () => {
     choiceEl.style.display = 'none';
-    tryCandidates(['./full_tst_tile_ulite.glb', './full_tst_tile_lite.glb', './full_tst_tile.glb']);
+    tryCandidates(['https://pub-416445574a884243bd824c17d0b5a289.r2.dev/full_tst_tile_ulite.glb', 'https://pub-416445574a884243bd824c17d0b5a289.r2.dev/full_tst_tile_lite.glb', 'https://pub-416445574a884243bd824c17d0b5a289.r2.dev/full_tst_tile.glb']);
     syncZoomLock();
   });
   document.getElementById('qc-full').addEventListener('click', () => {
     choiceEl.style.display = 'none';
-    tryCandidates(['./full_tst_tile.glb']);
+    tryCandidates(['https://pub-416445574a884243bd824c17d0b5a289.r2.dev/full_tst_tile.glb']);
     syncZoomLock();
   });
 }
@@ -2506,7 +2506,7 @@ function actionPose(now) {
 // Eating (stall, E), Sleeping (bed, E), Riding (bike, F).
 let bryce = null; // { group, mixer, clips, loco, oneShot, current }
 function loadBryce() {
-  loader.load('./bryce_animated.glb', (g) => {
+  loader.load('https://pub-416445574a884243bd824c17d0b5a289.r2.dev/bryce_animated.glb', (g) => {
     const group = g.scene;
     group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     const mixer = new THREE.AnimationMixer(group);
