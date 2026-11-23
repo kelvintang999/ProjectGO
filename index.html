@@ -36,7 +36,7 @@
     color: #fff; font-size: 22px; font-weight: 700; pointer-events: none;
   }
   #quality-choice {
-    position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+    position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center;
     background: rgba(8, 12, 22, 0.94); backdrop-filter: blur(4px);
   }
   #quality-choice .panel { width: min(420px, 92vw); text-align: center; }
@@ -44,7 +44,7 @@
   #quality-choice .sub { color: #b9c6da; font-size: 13px; margin: 0 0 24px; }
   .qc-btn {
     display: block; width: 100%; margin: 0 0 12px; padding: 16px 18px; text-align: left;
-    font-size: 17px; font-weight: 700; border-radius: 12px;
+    font-size: 17px; font-weight: 700; border-radius: 12px; min-height: 48px;
   }
   .qc-btn .qc-tag {
     display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px;
@@ -53,6 +53,40 @@
   .qc-btn .qc-desc { display: block; margin-top: 5px; font-size: 13px; font-weight: 400; color: #cbd5e1; }
   .qc-btn .qc-warn { display: block; margin-top: 5px; font-size: 12px; font-weight: 400; color: #fca5a5; }
   #quality-choice .note { color: #94a3b8; font-size: 12px; margin: 16px 0 0; }
+  /* main menu + in-game menu: same fullscreen-overlay look as the
+     quality chooser. Main menu (z 30) is the first screen; the pause
+     menu (z 31) sits on top of everything while playing; the settings
+     screen (z 32) sits one layer above the menus. */
+  #main-menu {
+    position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+    background: rgba(8, 12, 22, 0.94); backdrop-filter: blur(4px);
+  }
+  #pause-menu {
+    position: fixed; inset: 0; z-index: 31; display: none; align-items: center; justify-content: center;
+    background: rgba(8, 12, 22, 0.88); backdrop-filter: blur(4px);
+  }
+  #settings-menu {
+    position: fixed; inset: 0; z-index: 32; display: none; align-items: center; justify-content: center;
+    background: rgba(8, 12, 22, 0.94); backdrop-filter: blur(4px);
+  }
+  #main-menu .panel, #pause-menu .panel, #settings-menu .panel { width: min(420px, 92vw); max-height: 86vh; overflow-y: auto; text-align: center; }
+  #main-menu h1, #pause-menu h1, #settings-menu h1 { color: #e8eef7; font-size: 30px; margin: 0 0 6px; font-weight: 700; }
+  #main-menu .sub, #pause-menu .sub, #settings-menu .sub { color: #b9c6da; font-size: 13px; margin: 0 0 16px; }
+  #main-menu .pitch { color: #e8eef7; font-size: 14px; line-height: 1.6; margin: 0 0 20px; }
+  .menu-start { min-height: 52px; text-align: center; }
+  .menu-section { color: #e8eef7; font-size: 13px; font-weight: 700; text-align: left; margin: 0 0 8px; }
+  .menu-list { text-align: left; margin: 0 0 16px; padding: 0; list-style: none; }
+  .menu-list li { color: #cbd5e1; font-size: 13px; line-height: 1.7; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .menu-list li:last-child { border-bottom: 0; }
+  .menu-list .label { color: #e8eef7; font-weight: 700; }
+  .menu-controls { text-align: left; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px 14px; margin: 0 0 8px; }
+  .menu-controls h2 { color: #e8eef7; font-size: 13px; margin: 0 0 6px; font-weight: 700; }
+  .menu-controls p { color: #b9c6da; font-size: 13px; line-height: 1.8; margin: 0; }
+  #main-menu .note, #pause-menu .note, #settings-menu .note { color: #94a3b8; font-size: 12px; margin: 16px 0 0; }
+  /* settings rows: label left, on/off value right (min-height 48px comes from .qc-btn) */
+  .set-row { display: flex; justify-content: space-between; align-items: center; }
+  .set-row .set-val { color: #e8eef7; font-weight: 700; }
+  .set-soon { color: #94a3b8; font-size: 12px; text-align: left; margin: -8px 0 16px; }
   #toast {
     position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%) translateY(8px); z-index: 11;
     color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
@@ -113,10 +147,11 @@
     .kb-help { display: none; }
     .touch-help { display: inline; }
     #help { bottom: 210px; white-space: normal; max-width: 92vw; text-align: center; }
-    #toast { bottom: 160px; }
+    #toast { bottom: 160px; white-space: normal; max-width: 92vw; text-align: center; }
     #sit-prompt { bottom: 260px; }
     #car-prompt { bottom: 310px; }
     #uiToggle { bottom: 100px; right: 20px; } /* above the 64px touch buttons (top edge 84px) */
+    #menuBtn { bottom: 158px; right: 20px; } /* above #uiToggle (100 + 48 + 10) */
   }
   #err { color: #fca5a5; }
   /* UI collapse toggle: always visible, bottom-right (above the touch
@@ -125,6 +160,13 @@
   #uiToggle {
     position: fixed; right: 12px; bottom: 12px; z-index: 15;
     width: 48px; height: 48px; border-radius: 50%; padding: 0; font-size: 20px;
+    background: rgba(51, 65, 85, 0.85); border: 1px solid rgba(255,255,255,0.25);
+  }
+  /* in-game menu button: pill, bottom-right above #uiToggle, outside
+     #hud so it stays visible when the UI is collapsed */
+  #menuBtn {
+    position: fixed; right: 12px; bottom: 70px; z-index: 15;
+    min-height: 48px; padding: 10px 18px; border-radius: 999px; font-size: 14px;
     background: rgba(51, 65, 85, 0.85); border: 1px solid rgba(255,255,255,0.25);
   }
   body.ui-collapsed #hud, body.ui-collapsed #help { display: none; }
@@ -143,7 +185,7 @@
     <button id="pick">選擇 .glb 檔案</button>
     <button id="reset" class="secondary">重置視角</button>
     <button id="shadowToggle" class="secondary">陰影：開</button>
-    <button id="modeToggle" class="secondary">模式：飛行</button>
+    <button id="modeToggle" class="secondary">模式：步行</button>
     <button id="navToggle" class="secondary">導航模式：開</button>
     <button id="nightToggle" class="secondary">夜間：關</button>
     <button id="punchBtn" class="secondary">拳 (J)</button>
@@ -175,7 +217,62 @@
   </div>
 </div>
 <button id="uiToggle" title="收起／展開介面 (H)">☰</button>
+<button id="menuBtn" title="選單 (Esc)">選單</button>
 <div id="drop-hint">放開以載入 .glb</div>
+<div id="main-menu">
+  <div class="panel">
+    <h1>Project GO</h1>
+    <p class="sub">尖沙咀 3D · 自由探索</p>
+    <p class="pitch">在尖沙咀自由探索——步行、開車、坐下休息、打拳</p>
+    <button id="menu-start" class="qc-btn menu-start">開始遊戲</button>
+    <button id="menu-settings" class="qc-btn secondary menu-start">設定</button>
+    <p class="menu-section">可以做的事</p>
+    <ul class="menu-list">
+      <li>🚶 <span class="label">步行探索</span>——尖沙咀碼頭、海濱、廣東道</li>
+      <li>🚗 <span class="label">開車</span>——走到車旁按 F（手機點「上車」）</li>
+      <li>🪑 <span class="label">坐下休息</span>——走到長椅按 E（手機點「坐下」）</li>
+      <li>🥊 <span class="label">打拳</span>——J 出拳、K 出腿、L 連招</li>
+    </ul>
+    <div class="menu-controls">
+      <h2>操作說明</h2>
+      <p><span class="touch-help">左搖桿移動 · 拖曳轉鏡頭 · 右下按鈕：跑／升／降 · 開車：搖桿上推加速、左右轉向</span><span class="kb-help">WASD 移動 · Shift 跑 · 空白鍵飛 · 滑鼠轉鏡頭 · 滾輪縮放 · E 坐下 · F 上車 · T 喝水 · H 收起介面 · Esc 選單</span></p>
+    </div>
+    <p class="note">地圖資料：香港特區政府地政總署 · 3D-BIT00 · CSDI</p>
+  </div>
+</div>
+<div id="pause-menu">
+  <div class="panel">
+    <h1>選單</h1>
+    <p class="sub">Project GO · 尖沙咀 3D</p>
+    <button id="pause-resume" class="qc-btn menu-start">繼續遊戲</button>
+    <button id="pause-settings" class="qc-btn secondary menu-start">設定</button>
+    <div class="menu-controls">
+      <h2>操作說明</h2>
+      <p><span class="touch-help">左搖桿移動 · 拖曳轉鏡頭 · 開車：搖桿上推加速、左右轉向</span><span class="kb-help">WASD 移動 · E 坐下 · F 上車 · T 喝水 · H 收起介面 · Esc 選單</span></p>
+    </div>
+    <button id="pause-restart" class="qc-btn secondary menu-start">重新開始</button>
+    <p class="note">地圖資料：香港特區政府地政總署 · 3D-BIT00 · CSDI</p>
+  </div>
+</div>
+<div id="settings-menu">
+  <div class="panel">
+    <h1>設定</h1>
+    <p class="sub">Project GO · 尖沙咀 3D</p>
+    <p class="menu-section">角色選擇</p>
+    <ul class="menu-list">
+      <!-- 加角色：加一項 <li>，再在 JS 接選擇邏輯 -->
+      <li>✓ <span class="label">Bryce</span>——當前角色</li>
+    </ul>
+    <p class="set-soon">更多角色即將推出</p>
+    <p class="menu-section">畫面</p>
+    <button id="set-shadow" class="qc-btn set-row">光影<span class="set-val">開</span></button>
+    <button id="set-night" class="qc-btn set-row">夜間<span class="set-val">關</span></button>
+    <button id="set-nav" class="qc-btn set-row">導航模式<span class="set-val">開</span></button>
+    <button id="set-reset" class="qc-btn">重置視角</button>
+    <button id="set-pick" class="qc-btn">選擇 .glb 檔案</button>
+    <button id="settings-back" class="qc-btn secondary menu-start">返回</button>
+  </div>
+</div>
 <div id="quality-choice">
   <div class="panel">
     <h1>Project GO</h1>
@@ -268,7 +365,7 @@ let recenterDone = false;
 // ---------- mode: 'walk' (third-person) or 'fly' (orbit + WASD) ----------
 // Default is fly: the page opens on the aerial view; switch to walk
 // to drop the character in.
-let mode = 'fly';
+let mode = 'walk';
 
 function setStatus(text, isError) {
   statusEl.textContent = text;
@@ -999,6 +1096,14 @@ function showBoundaryToast() {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3500);
 }
 
+// generic toast (first-time hint): any text, custom duration, no cooldown
+function showToast(text, ms) {
+  toastEl.textContent = text;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms || 3500);
+}
+
 function clampToBounds() {
   if (!bounds) return;
   let hit = false;
@@ -1137,6 +1242,9 @@ function updateWalkCamera() {
 }
 
 // ---------- mode switching ----------
+// first-time walk hint: shown once, the first time the player switches
+// to walk mode (see setMode); once per page load, no localStorage
+let walkHintShown = false;
 function setMode(m) {
   // switching modes while seated: stand back up first (the bench is a
   // walk-mode thing; flying off while seated would freeze the pose)
@@ -1145,6 +1253,13 @@ function setMode(m) {
   // just snap back to the ground so the mode switch can't get stuck)
   if (carState !== 'none') cancelCar();
   mode = m;
+  // first-time hint: name the two nearest interactions (car + bench)
+  if (m === 'walk' && !walkHintShown) {
+    walkHintShown = true;
+    showToast(isMobile
+      ? '走到車旁點「上車」開車，走到長椅點「坐下」休息'
+      : '走到車旁按 F 上車，走到長椅按 E 坐下', 5000);
+  }
   document.getElementById('modeToggle').textContent = '模式：' + (mode === 'walk' ? '步行' : '飛行');
   controls.enabled = (mode === 'fly');
   if (mode === 'walk' && model) updateWalkCamera();
@@ -1234,6 +1349,8 @@ function loadFromFile(file) {
   // loading behind the choice overlay
   const qc = document.getElementById('quality-choice');
   if (qc) qc.style.display = 'none';
+  const mm = document.getElementById('main-menu');
+  if (mm) mm.style.display = 'none';
   setStatus('讀取檔案：' + file.name);
   showProgress(0.5);
   const reader = new FileReader();
@@ -1246,7 +1363,7 @@ function loadFromFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
-// ---------- entry: ?model= URL, else quality choice, else picker ----------
+// ---------- entry: ?model= URL, else main menu -> quality choice, else picker ----------
 // Full (512² textures, ~1.9GB GPU memory) is too heavy for most devices,
 // not just phones, so the player picks Lite or Full up front; Lite is the
 // recommended default. Lite tries the ultra-lite map (128²) first when
@@ -1263,11 +1380,19 @@ function tryCandidates(candidates) {
   })(0);
 }
 const choiceEl = document.getElementById('quality-choice');
+const mainMenuEl = document.getElementById('main-menu');
 if (modelParam) {
+  // direct load: skip the main menu AND the quality choice
+  mainMenuEl.style.display = 'none';
   choiceEl.style.display = 'none';
   loadFromUrl(modelParam, modelParam.split('/').pop());
 } else {
   setStatus('請選擇畫質：Lite 或 Full');
+  // main menu first: start -> quality choice -> load
+  document.getElementById('menu-start').addEventListener('click', () => {
+    mainMenuEl.style.display = 'none';
+    choiceEl.style.display = 'flex';
+  });
   document.getElementById('qc-lite').addEventListener('click', () => {
     choiceEl.style.display = 'none';
     tryCandidates(['./full_tst_tile_ulite.glb', './full_tst_tile_lite.glb', './full_tst_tile.glb']);
@@ -1297,22 +1422,26 @@ window.addEventListener('drop', (e) => {
   if (f) loadFromFile(f);
 });
 
-document.getElementById('reset').addEventListener('click', () => {
+// reset view: shared by the HUD button and the settings screen
+function resetView() {
   if (!model) return;
   if (mode === 'walk') spawnCharacter();
   else frameModel();
-});
+}
+document.getElementById('reset').addEventListener('click', resetView);
 
-// shadow on/off (helps diagnose fill-rate / GPU bottlenecks)
+// shadow on/off (helps diagnose fill-rate / GPU bottlenecks). One setter
+// shared by the HUD button and the settings screen, so both stay in sync.
 let shadowsOn = !isMobile;
-document.getElementById('shadowToggle').textContent = '陰影：' + (shadowsOn ? '開' : '關');
-document.getElementById('shadowToggle').addEventListener('click', () => {
-  shadowsOn = !shadowsOn;
+function setShadows(on) {
+  shadowsOn = on;
   renderer.shadowMap.enabled = shadowsOn;
   sun.castShadow = shadowsOn;
   scene.traverse((o) => { if (o.isMesh && o.material) o.material.needsUpdate = true; });
   document.getElementById('shadowToggle').textContent = '陰影：' + (shadowsOn ? '開' : '關');
-});
+}
+document.getElementById('shadowToggle').textContent = '陰影：' + (shadowsOn ? '開' : '關');
+document.getElementById('shadowToggle').addEventListener('click', () => setShadows(!shadowsOn));
 
 // which GPU is the browser actually using? (dual-GPU laptops often run
 // Chrome on the integrated GPU, which is the #1 cause of low FPS here)
@@ -1431,9 +1560,68 @@ window.addEventListener('keydown', (e) => {
     else if (e.code === 'KeyF') toggleCar();
     else if (e.code === 'KeyT') drinkWater();
     else if (e.code === 'KeyH') setUICollapsed(!uiCollapsed);
+    else if (e.code === 'Escape') { if (settingsOpen) closeSettings(); else setPauseMenu(!pauseOpen); }
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+// ---------- in-game menu (Esc / 選單 button) ----------
+// v1 does not pause the render loop (the ferry keeps sailing): the
+// overlay covers the screen and blocks game input, and with no input
+// the character just stands still.
+const pauseMenuEl = document.getElementById('pause-menu');
+let pauseOpen = false;
+function setPauseMenu(open) {
+  if (open) {
+    // never open over the start screens (main menu / quality choice)
+    if (getComputedStyle(mainMenuEl).display !== 'none' ||
+        getComputedStyle(choiceEl).display !== 'none') return;
+    for (const k in keys) keys[k] = false; // stop any held movement
+  }
+  pauseOpen = open;
+  pauseMenuEl.style.display = open ? 'flex' : 'none';
+}
+document.getElementById('pause-resume').addEventListener('click', () => setPauseMenu(false));
+document.getElementById('pause-restart').addEventListener('click', () => location.reload());
+document.getElementById('menuBtn').addEventListener('click', () => setPauseMenu(!pauseOpen));
+
+// ---------- settings screen ----------
+// Opened from the main menu or the pause menu (z 32, above both); the
+// back button (or Esc) returns to whichever menu opened it. The three
+// toggles share one state variable each with the HUD buttons (shadowsOn
+// / nightMode / navMode): toggling here calls the same setters, so the
+// HUD text updates at once; opening the screen re-reads the variables,
+// so HUD toggles made while it was closed show up correctly.
+const settingsMenuEl = document.getElementById('settings-menu');
+let settingsOpen = false;
+let settingsReturn = 'main'; // 'main' | 'pause': which menu opened settings
+function syncSettingsUI() {
+  document.querySelector('#set-shadow .set-val').textContent = shadowsOn ? '開' : '關';
+  document.querySelector('#set-night .set-val').textContent = nightMode ? '開' : '關';
+  document.querySelector('#set-nav .set-val').textContent = navMode ? '開' : '關';
+}
+function openSettings(from) {
+  settingsReturn = from;
+  if (from === 'pause') setPauseMenu(false);
+  else mainMenuEl.style.display = 'none';
+  syncSettingsUI();
+  settingsOpen = true;
+  settingsMenuEl.style.display = 'flex';
+}
+function closeSettings() {
+  settingsOpen = false;
+  settingsMenuEl.style.display = 'none';
+  if (settingsReturn === 'pause') setPauseMenu(true);
+  else mainMenuEl.style.display = 'flex';
+}
+document.getElementById('menu-settings').addEventListener('click', () => openSettings('main'));
+document.getElementById('pause-settings').addEventListener('click', () => openSettings('pause'));
+document.getElementById('settings-back').addEventListener('click', closeSettings);
+document.getElementById('set-shadow').addEventListener('click', () => { setShadows(!shadowsOn); syncSettingsUI(); });
+document.getElementById('set-night').addEventListener('click', () => { setNightMode(!nightMode); syncSettingsUI(); });
+document.getElementById('set-nav').addEventListener('click', () => { setNavMode(!navMode); syncSettingsUI(); });
+document.getElementById('set-reset').addEventListener('click', resetView);
+document.getElementById('set-pick').addEventListener('click', () => fileInput.click());
 
 // ---------- touch controls (mobile) ----------
 // Virtual joystick (bottom-left) moves the character; drag anywhere else
