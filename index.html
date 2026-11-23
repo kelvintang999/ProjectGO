@@ -116,6 +116,18 @@
     border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
     display: none; pointer-events: none;
   }
+  #sleep-prompt {
+    position: fixed; bottom: 248px; left: 50%; transform: translateX(-50%); z-index: 11;
+    color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
+    display: none; pointer-events: none;
+  }
+  /* sleep fade: black overlay for the no-clip fallback (1s fade each way).
+     z-index 20 covers the HUD/prompts/toast, stays under the menus (30+). */
+  #sleep-fade {
+    position: fixed; inset: 0; z-index: 20; background: #000;
+    opacity: 0; pointer-events: none; transition: opacity 1s;
+  }
   #nav-hud {
     position: fixed; top: 12px; right: 12px; z-index: 10; text-align: right;
     color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.8); pointer-events: none;
@@ -161,6 +173,7 @@
     #sit-prompt { bottom: 260px; }
     #car-prompt { bottom: 310px; }
     #eat-prompt { bottom: 360px; }
+    #sleep-prompt { bottom: 410px; }
     #uiToggle { bottom: 100px; right: 20px; } /* above the 64px touch buttons (top edge 84px) */
     #menuBtn { bottom: 158px; right: 20px; } /* above #uiToggle (100 + 48 + 10) */
   }
@@ -208,16 +221,19 @@
     <button id="drinkBtn" class="secondary">喝水 (T)</button>
     <button id="eatBtn" class="secondary">吃飯 (E)</button>
     <button id="sitBtn" class="secondary">坐下 (E)</button>
+    <button id="sleepBtn" class="secondary">睡覺 (E)</button>
     <button id="carBtn" class="secondary">上車 (F)</button>
   </div>
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
 
-<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下／吃飯 · F 上車 · T 喝水 · H 收起介面</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車：搖桿上推加速、左右轉向 · 右下角按鈕收起介面</span></div>
+<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下／吃飯／睡覺 · F 上車 · T 喝水 · H 收起介面</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車：搖桿上推加速、左右轉向 · 右下角按鈕收起介面</span></div>
 <div id="toast"></div>
 <div id="sit-prompt"></div>
 <div id="car-prompt"></div>
 <div id="eat-prompt"></div>
+<div id="sleep-prompt"></div>
+<div id="sleep-fade"></div>
 <div id="nav-hud">
   <div id="nav-speed">0</div>
   <div id="nav-unit">km/h</div>
@@ -1206,6 +1222,7 @@ document.getElementById('comboBtn').addEventListener('click', () => startAction(
 document.getElementById('drinkBtn').addEventListener('click', () => drinkWater());
 document.getElementById('eatBtn').addEventListener('click', () => eatFood());
 document.getElementById('sitBtn').addEventListener('click', () => toggleSit());
+document.getElementById('sleepBtn').addEventListener('click', () => trySleep());
 document.getElementById('carBtn').addEventListener('click', () => toggleCar());
 
 function spawnCharacter() {
@@ -1213,6 +1230,9 @@ function spawnCharacter() {
   if (sitState !== 'stand') cancelSit();
   // same while driving: drop out of the car first
   if (carState !== 'none') cancelCar();
+  // same while asleep: wake up first (no wake-up animation — just
+  // reset so the teleport can't leave the character lying mid-air)
+  if (sleepState !== 'awake') cancelSleep();
   // a teleport is not a fall: drop any in-progress fall tracking
   // (fallStartY lives in the food-stall section below)
   fallStartY = null;
@@ -1272,6 +1292,9 @@ function setMode(m) {
   // same while driving: get out of the car first (no exit animation —
   // just snap back to the ground so the mode switch can't get stuck)
   if (carState !== 'none') cancelCar();
+  // same while asleep: wake up first (flying off while asleep would
+  // freeze the lying pose)
+  if (sleepState !== 'awake') cancelSleep();
   mode = m;
   // first-time hint: name the two nearest interactions (car + bench)
   if (m === 'walk' && !walkHintShown) {
@@ -1333,6 +1356,7 @@ function onLoaded(gltf, name) {
   createBench();
   createCar();
   createStall();
+  createBed();
   createPierDeck();
   // road + collision data is baked for this map: reset on every load
   // (a different .glb must not inherit the old map's data), then
@@ -1612,7 +1636,7 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyJ') startAction('punch');
     else if (e.code === 'KeyK') startAction('kick');
     else if (e.code === 'KeyL') startAction('combo');
-    else if (e.code === 'KeyE') { toggleSit(); eatFood(); } // E is contextual: bench -> sit, stall -> eat (their ranges never overlap)
+    else if (e.code === 'KeyE') tryInteract(); // E is contextual: nearest in-range interaction wins (bench / stall / bed); already asleep or seated exits first
     else if (e.code === 'KeyF') toggleCar();
     else if (e.code === 'KeyT') drinkWater();
     else if (e.code === 'KeyH') setUICollapsed(!uiCollapsed);
@@ -1747,6 +1771,7 @@ function startAction(name) {
   if (mode !== 'walk' || flying) return;
   if (sitState !== 'stand') return; // no martial arts while sitting down
   if (carState !== 'none') return; // no martial arts while in the car
+  if (sleepState !== 'awake') return; // no martial arts while asleep
   // rigged character: play the Mixamo clip instead of the procedural pose
   if (bryce) {
     if (name === 'punch') playOneShot('Punching');
@@ -2357,6 +2382,234 @@ function applyFallDamage(drop) {
   }
 }
 
+// ---------- bed + sleeping (KayKit Lie_Down / Sleeping / Lie_StandUp) ----------
+// One procedural bed on the pier plaza, 8m west of the spawn (bench is
+// 6m south, car 9m north, food stall 8m east — the four never crowd
+// each other). Sleeping restores health to full. The clips land later
+// from the Blender retarget batch (KayKit Lie_Idle -> 'Sleeping'); until
+// then a black fade stands in for the sleep (no error toast).
+// State machine: 'awake' -> E near bed -> 'lying' (Lie_Down one-shot,
+// or the fade) -> 'asleep' ('Sleeping' loop, or black screen) -> E ->
+// 'waking' (Lie_StandUp one-shot) -> 'awake'. The health restore applies
+// on waking up, so a cancelled sleep restores nothing. Movement + J/K/L
+// lock in every state except 'awake'; the transitions ignore E so a
+// double-tap can't desync the state. Sleeping works without Bryce (fade
+// path), like eating.
+let bed = null; // { group, pos, sleepPos, sleepYaw }
+let sleepState = 'awake';
+const SLEEP_RANGE = 2.5;
+const SLEEP_FADE_MS = 1000;  // must match the #sleep-fade CSS transition
+const SLEEP_BLACK_MS = 1500; // how long the screen stays black (no-clip fallback)
+
+function createBed() {
+  if (bed) { scene.remove(bed.group); bed = null; }
+  if (!model) return;
+  // bed 8m west of the spawn, on the open plaza; long axis along X,
+  // headboard at the west end. The sleeper faces east (+X, toward the
+  // spawn) and lies back, head landing at the west end — see sleepPos.
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const bx = sx - 8, bz = sz;
+  const by = groundHeight(bx, bz, 50);
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 });
+  const sheet = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.9 });
+  const blanket = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.9 });
+  const box = (w, h, d, m, x, y, z) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    g.add(b);
+    return b;
+  };
+  // frame + legs (frame top at 0.28m)
+  for (const dx of [-1.0, 1.0]) for (const dz of [-0.5, 0.5]) box(0.08, 0.15, 0.08, wood, dx, 0.075, dz);
+  box(2.2, 0.13, 1.2, wood, 0, 0.215, 0);
+  // headboard at the west end
+  box(0.08, 0.8, 1.2, wood, -1.06, 0.4, 0);
+  // mattress: white, top at ~0.46m
+  box(2.1, 0.18, 1.1, sheet, 0, 0.37, 0);
+  // pillow at the head (west) end
+  box(0.5, 0.1, 0.7, sheet, -0.75, 0.51, 0);
+  // blanket over the foot two-thirds
+  box(1.25, 0.06, 1.12, blanket, 0.4, 0.49, 0);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(bx, by, bz);
+  scene.add(g);
+  // sleep spot: feet at the foot (east) end, facing the spawn. The
+  // Lie_Down clip lies the body back along the bed, head to the west.
+  // (Assumption — see patch.md: tune sleepYaw / the +0.85 offset after
+  // the 19:00 Blender preview if the body lands across the bed.)
+  bed = {
+    group: g,
+    pos: new THREE.Vector3(bx, by, bz),
+    sleepPos: new THREE.Vector3(bx + 0.85, by, bz),
+    sleepYaw: Math.PI / 2 // facing +X (east, toward the spawn)
+  };
+}
+
+// Bed collision: same push-out as collideBench (the bed is axis-aligned,
+// no rotation, so the test is plain). Skipped while asleep (the sleeper
+// is meant to be on the bed) and while flying above it.
+function collideBed() {
+  if (!bed || sleepState !== 'awake') return;
+  if (charPos.y > bed.pos.y + 1.2) return; // flying over it
+  const hw = 1.1 + 0.4, hd = 0.6 + 0.4; // frame half-extents + character radius
+  const lx = charPos.x - bed.pos.x, lz = charPos.z - bed.pos.z;
+  if (Math.abs(lx) > hw || Math.abs(lz) > hd) return; // outside
+  const dx = hw - Math.abs(lx), dz = hd - Math.abs(lz);
+  if (dx <= dz) charPos.x = bed.pos.x + Math.sign(lx || 1) * hw;
+  else charPos.z = bed.pos.z + Math.sign(lz || 1) * hd;
+}
+
+// Health lives in the eating section (`health` + updateHealthUI()).
+// Defensive: if this block is ever merged before eating lands, fall
+// back to painting the bar full directly (the next eat/damage event
+// resyncs it from the real variable).
+function restoreHealthFull() {
+  if (typeof health !== 'undefined' && typeof updateHealthUI === 'function') {
+    health = (typeof HEALTH_MAX !== 'undefined') ? HEALTH_MAX : 100;
+    updateHealthUI();
+  } else {
+    const f = document.getElementById('health-fill');
+    const t = document.getElementById('health-text');
+    if (f) { f.style.width = '100%'; f.style.background = '#22c55e'; }
+    if (t) t.textContent = '體力 100/100';
+  }
+  showToast('睡了一覺，體力回滿了', 3000);
+}
+
+const sleepFadeEl = document.getElementById('sleep-fade');
+let sleepFadeTimers = []; // setTimeout ids for the no-clip fallback sequence
+function clearSleepFadeTimers() {
+  for (const t of sleepFadeTimers) clearTimeout(t);
+  sleepFadeTimers = [];
+}
+function sleepFadeFallback() {
+  // No clips yet: fade to black, hold, fade back — the sleep happens
+  // behind the fade. Every step re-checks sleepState so a cancel
+  // (mode switch / respawn) stops the sequence cold.
+  sleepFadeEl.style.opacity = '1';
+  sleepFadeTimers.push(setTimeout(() => {
+    if (sleepState !== 'lying') return;
+    sleepState = 'asleep';
+    sleepFadeTimers.push(setTimeout(() => {
+      if (sleepState !== 'asleep') return;
+      sleepFadeEl.style.opacity = '0';
+      sleepFadeTimers.push(setTimeout(() => {
+        if (sleepState !== 'asleep') return;
+        sleepState = 'awake';
+        restoreHealthFull();
+      }, SLEEP_FADE_MS + 100));
+    }, SLEEP_BLACK_MS));
+  }, SLEEP_FADE_MS + 100));
+}
+
+function trySleep() {
+  if (!bed) return;
+  if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return; // not while sitting down
+  if (carState !== 'none') return; // not while in the car
+  if (sleepState === 'awake') {
+    const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
+    if (d > SLEEP_RANGE) return;
+    if (bryce && bryce.oneShot) return; // wait for a move to finish
+    sleepState = 'lying';
+    // snap to the sleep spot (v1: no walk-up animation), like toggleSit
+    charPos.copy(bed.sleepPos);
+    charYaw = bed.sleepYaw;
+    charGroup.position.copy(charPos);
+    charGroup.rotation.y = charYaw;
+    if (bryce) {
+      bryce.group.position.copy(charPos);
+      bryce.group.rotation.y = charYaw;
+    }
+    // all-or-nothing: a partial clip set (e.g. Sleeping without
+    // Lie_Down) would strand the state machine, so it falls back too
+    if (bryce && bryce.clips['Lie_Down'] && bryce.clips['Sleeping'] && bryce.clips['Lie_StandUp']) {
+      if (!playOneShot('Lie_Down', () => {
+        if (sleepState !== 'lying') return; // cancelled (mode switch / reset)
+        sleepState = 'asleep';
+        playLoco('Sleeping');
+      })) sleepState = 'awake';
+    } else {
+      // clips not loaded yet (or no Bryce at all): the fade stands in
+      if (bryce) console.warn('Sleep clips not loaded yet — using fade fallback');
+      sleepFadeFallback();
+    }
+  } else if (sleepState === 'asleep') {
+    if (bryce && bryce.oneShot) return;
+    if (bryce && bryce.clips['Lie_StandUp'] && bryce.clips['Sleeping']) {
+      sleepState = 'waking';
+      if (!playOneShot('Lie_StandUp', () => {
+        if (sleepState !== 'waking') return; // cancelled
+        sleepState = 'awake';
+        playLoco('Idle');
+        restoreHealthFull();
+      })) sleepState = 'asleep';
+    }
+    // fade path: the sequence finishes on its own in ~3.7s; E during
+    // the black screen is ignored
+  }
+  // 'lying' / 'waking' transitions ignore E
+}
+
+function cancelSleep() {
+  // force back to awake (mode switch / respawn). The in-flight
+  // one-shot (if any) still finishes on its own, but its onDone is
+  // guarded by sleepState and returns early; updateWalk's playLoco('Idle')
+  // then takes over on the next frame. Any pending fade timers are
+  // cleared and the overlay is forced transparent.
+  if (sleepState === 'awake') return;
+  sleepState = 'awake';
+  clearSleepFadeTimers();
+  sleepFadeEl.style.opacity = '0';
+}
+
+const sleepPromptEl = document.getElementById('sleep-prompt');
+const sleepBtnEl = document.getElementById('sleepBtn');
+let lastSleepPrompt = null;
+function updateSleepPrompt() {
+  let text = '';
+  if (bed && mode === 'walk') {
+    if (sleepState === 'asleep' || sleepState === 'lying') text = '按 E 起床';
+    else if (sleepState === 'awake' && !flying && sitState === 'stand' && carState === 'none') {
+      const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
+      if (d <= SLEEP_RANGE) text = '按 E 睡覺';
+    }
+  }
+  if (text !== lastSleepPrompt) {
+    lastSleepPrompt = text;
+    sleepPromptEl.textContent = text;
+    sleepPromptEl.style.display = text ? 'block' : 'none';
+    sleepBtnEl.textContent = (sleepState === 'asleep' || sleepState === 'lying') ? '起床 (E)' : '睡覺 (E)';
+  }
+}
+
+// E-key dispatcher: one key, three interactions (bench / stall / bed,
+// plus waking up / standing up). Already-in-a-state exits win first;
+// otherwise the nearest in-range interaction wins, so E stays
+// deterministic even if two ranges ever overlap.
+function tryInteract() {
+  if (sleepState !== 'awake') { trySleep(); return; }
+  if (sitState !== 'stand') { toggleSit(); return; }
+  let best = null, bestD = Infinity;
+  if (bench) {
+    const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
+    if (d <= SIT_RANGE && d < bestD) { best = 'sit'; bestD = d; }
+  }
+  if (stall) {
+    const d = Math.hypot(charPos.x - stall.pos.x, charPos.z - stall.pos.z);
+    if (d <= EAT_RANGE && d < bestD) { best = 'eat'; bestD = d; }
+  }
+  if (bed) {
+    const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
+    if (d <= SLEEP_RANGE && d < bestD) { best = 'sleep'; bestD = d; }
+  }
+  if (best === 'sit') toggleSit();
+  else if (best === 'eat') eatFood();
+  else if (best === 'sleep') trySleep();
+}
+
 function updateDrive(dt) {
   // arcade driving: W/S (or the touch joystick) throttle + brake/
   // reverse, A/D (or joystick left/right) steering, Shift for the
@@ -2495,14 +2748,14 @@ function updateWalk(dt) {
   // sitting down / seated / standing up, and while getting in/out of
   // the car (the one-shot's root motion does the moving, not the keys)
   const pose = actionPose(clock.elapsedTime);
-  if (pose || (bryce && bryce.oneShot) || sitState !== 'stand' || carState !== 'none') { move.set(0, 0, 0); moving = false; }
+  if (pose || (bryce && bryce.oneShot) || sitState !== 'stand' || carState !== 'none' || sleepState !== 'awake') { move.set(0, 0, 0); moving = false; }
   const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
   const wantFly = keys['Space'] || touchFlyUp;
   const wantDown = keys['ControlLeft'] || keys['ControlRight'] || touchFlyDown;
   // vertical: hold Space to fly up, Ctrl to descend; otherwise hover.
   // No flying while seated or in the car.
   let vy = 0;
-  if (wantFly && sitState === 'stand' && carState === 'none') { flying = true; vy = 12; }
+  if (wantFly && sitState === 'stand' && carState === 'none' && sleepState === 'awake') { flying = true; vy = 12; }
   if (wantDown) { vy = -12; }
   if (moving) {
     // analog stick: slight push = slow walk (keyboard input is always
@@ -2530,10 +2783,12 @@ function updateWalk(dt) {
   collideBench();
   // don't walk through the food stall (push-out, see collideStall)
   collideStall();
+  // don't walk through the bed (push-out, see collideBed)
+  collideBed();
   // don't walk through buildings (footprint grid; skipped while flying
-  // — fly mode is for aerial inspection — and while sitting or getting
+  // — fly mode is for aerial inspection — and while sitting, asleep, or getting
   // in/out of the car, so the push-out never fights an animation)
-  if (!flying && sitState === 'stand' && carState === 'none') collideFootprint(charPos, 0.4);
+  if (!flying && sitState === 'stand' && carState === 'none' && sleepState === 'awake') collideFootprint(charPos, 0.4);
   // vertical + ground (gy is reused by the fall check below, so it is
   // hoisted — the groundHeight calls keep their original order and refY)
   let gy;
@@ -2574,7 +2829,9 @@ function updateWalk(dt) {
     bryce.group.rotation.y = charYaw;
     // seated: hold the Sitting Idle loop (the normal branch would
     // override it with Idle every frame)
+    // asleep: same for the Sleeping loop
     if (sitState === 'seated') playLoco('Sitting Idle');
+    else if (sleepState === 'asleep') playLoco('Sleeping');
     else playLoco(flying ? 'Idle' : (!moving ? 'Idle' : (running ? 'Running' : 'Walking')));
   }
   // legs swing when running on the ground; dangle + lean forward when flying
@@ -2632,6 +2889,7 @@ function animate() {
   updateSitPrompt();
   updateCarPrompt();
   updateEatPrompt();
+  updateSleepPrompt();
   updateBuffUI();
   updateShadowFocus();
   updateNavHud(dt);
