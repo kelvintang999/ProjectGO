@@ -77,6 +77,12 @@
     color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.8); pointer-events: none;
     display: none;
   }
+  /* map data attribution — always visible, outside #hud so UI collapse never hides it */
+  #credit {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9;
+    color: rgba(255,255,255,0.65); text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    font-size: 11px; white-space: nowrap; pointer-events: none;
+  }
   #nav-speed { font-size: 56px; font-weight: 200; line-height: 1; letter-spacing: -1px; }
   #nav-unit { font-size: 13px; color: #cbd5e1; margin-top: 2px; }
   #nav-nav { font-size: 14px; color: #e2e8f0; margin-top: 8px; }
@@ -159,6 +165,7 @@
   <div id="nav-unit">km/h</div>
   <div id="nav-nav">尖沙咀</div>
 </div>
+<div id="credit" title="地圖資料來源：香港特別行政區政府地政總署三維空間數據（3D-BIT00），經空間數據共享平台（CSDI）提供；知識產權屬香港特區政府所有">地圖資料：香港特區政府地政總署 · 3D-BIT00 · CSDI</div>
 <div id="touch-ui">
   <div id="joy"><div id="joy-knob"></div></div>
   <div id="touch-btns">
@@ -181,6 +188,7 @@
       <span class="qc-warn">需要高效能電腦，手機／低階裝置不要選</span>
     </button>
     <p class="note">選擇後開始載入地圖</p>
+    <p class="note">地圖資料：香港特區政府地政總署 · 三維空間數據 3D-BIT00 · 經空間數據共享平台（CSDI）</p>
   </div>
 </div>
 
