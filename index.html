@@ -42,6 +42,12 @@
     transition: opacity 0.3s, transform 0.3s; white-space: nowrap;
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #sit-prompt {
+    position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); z-index: 11;
+    color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
+    display: none; pointer-events: none;
+  }
   #nav-hud {
     position: fixed; top: 12px; right: 12px; z-index: 10; text-align: right;
     color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.8); pointer-events: none;
@@ -78,6 +84,7 @@
     .touch-help { display: inline; }
     #help { bottom: 210px; white-space: normal; max-width: 92vw; text-align: center; }
     #toast { bottom: 160px; }
+    #sit-prompt { bottom: 260px; }
   }
   #err { color: #fca5a5; }
 </style>
@@ -101,12 +108,14 @@
     <button id="punchBtn" class="secondary">拳 (J)</button>
     <button id="kickBtn" class="secondary">腿 (K)</button>
     <button id="comboBtn" class="secondary">連招 (L)</button>
+    <button id="sitBtn" class="secondary">坐下 (E)</button>
   </div>
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
 
-<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降</span></div>
+<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降</span></div>
 <div id="toast"></div>
+<div id="sit-prompt"></div>
 <div id="nav-hud">
   <div id="nav-speed">0</div>
   <div id="nav-unit">km/h</div>
@@ -849,8 +858,11 @@ document.getElementById('nightToggle').addEventListener('click', () => setNightM
 document.getElementById('punchBtn').addEventListener('click', () => startAction('punch'));
 document.getElementById('kickBtn').addEventListener('click', () => startAction('kick'));
 document.getElementById('comboBtn').addEventListener('click', () => startAction('combo'));
+document.getElementById('sitBtn').addEventListener('click', () => toggleSit());
 
 function spawnCharacter() {
+  // teleporting while seated would leave the character sitting in mid-air
+  if (sitState !== 'stand') cancelSit();
   const sx = SPAWN_RAW.x - modelCenter.x;
   const sz = SPAWN_RAW.z - modelCenter.z;
   charPos.set(sx, 0, sz);
@@ -898,6 +910,9 @@ function updateWalkCamera() {
 
 // ---------- mode switching ----------
 function setMode(m) {
+  // switching modes while seated: stand back up first (the bench is a
+  // walk-mode thing; flying off while seated would freeze the pose)
+  if (sitState !== 'stand') cancelSit();
   mode = m;
   document.getElementById('modeToggle').textContent = '模式：' + (mode === 'walk' ? '步行' : '飛行');
   controls.enabled = (mode === 'fly');
@@ -949,6 +964,7 @@ function onLoaded(gltf, name) {
   buildOuterCity();
   createFerry();
   spawnCharacter();
+  createBench();
   setMode(mode); // apply the current mode to the fresh model
   // Mobile: Bryce loads only after the map is done, so the two big
   // .glb parses don't spike memory at the same time (iOS kills the tab).
@@ -1137,6 +1153,7 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyJ') startAction('punch');
     else if (e.code === 'KeyK') startAction('kick');
     else if (e.code === 'KeyL') startAction('combo');
+    else if (e.code === 'KeyE') toggleSit();
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -1207,6 +1224,7 @@ const MOVES = {
 let action = null; // { name, t0 }
 function startAction(name) {
   if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return; // no martial arts while sitting down
   // rigged character: play the Mixamo clip instead of the procedural pose
   if (bryce) {
     if (name === 'punch') playOneShot('Punching');
@@ -1304,6 +1322,125 @@ function playOneShot(name, onDone) {
   return true;
 }
 
+// ---------- bench + sitting (Mixamo Sitting / Sitting Idle / Stand Up) ----------
+// One procedural bench on the pier plaza, 6m south of the spawn, facing
+// the harbour. Sitting is Bryce-only (the procedural fallback has no
+// skeleton, so its Sitting clips don't exist). State machine:
+// 'stand' -> E near bench -> 'sitting' (Sitting one-shot) -> 'seated'
+// (Sitting Idle loop) -> E -> 'standing' (Stand Up one-shot) -> 'stand'.
+// Movement is locked in every state except 'stand'; the transitions
+// ignore E so a double-tap can't desync the state.
+let bench = null; // { group, pos, sitPos, yaw }
+let sitState = 'stand';
+const SIT_RANGE = 2.5;
+
+function createBench() {
+  if (bench) { scene.remove(bench.group); bench = null; }
+  if (!model) return;
+  // bench 6m south of the spawn, on the open plaza (17m+ clear of
+  // buildings), seat facing the harbour (+Z) — same view as the spawn.
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const bx = sx, bz = sz + 6;
+  const by = groundHeight(bx, bz, 50);
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x2f3336, roughness: 0.5, metalness: 0.6 });
+  const box = (w, h, d, m, x, y, z, rx = 0) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    b.rotation.x = rx;
+    g.add(b);
+    return b;
+  };
+  // seat: three wood slats, top at 0.45m (Mixamo sitting hip height)
+  for (const dz of [-0.18, 0, 0.18]) box(1.8, 0.06, 0.16, wood, 0, 0.42, dz);
+  // backrest: two wood slats on the north side, tilted back slightly
+  box(1.8, 0.14, 0.05, wood, 0, 0.7, -0.28, -0.15);
+  box(1.8, 0.14, 0.05, wood, 0, 0.92, -0.31, -0.15);
+  // dark metal frame: side legs + back posts + stretcher
+  for (const dx of [-0.8, 0.8]) {
+    box(0.06, 0.45, 0.5, metal, dx, 0.225, 0);
+    box(0.06, 0.95, 0.06, metal, dx, 0.475, -0.27, -0.15);
+  }
+  box(1.6, 0.05, 0.05, metal, 0, 0.15, 0);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(bx, by, bz);
+  scene.add(g);
+  // sit spot: in front of the seat's front edge, facing the harbour.
+  // The hips land ~0.3m behind the feet in the Mixamo sitting pose,
+  // which puts them on the seat (seat spans z -0.275..+0.275).
+  bench = {
+    group: g,
+    pos: new THREE.Vector3(bx, by, bz),
+    sitPos: new THREE.Vector3(bx, by, bz + 0.35),
+    yaw: 0
+  };
+}
+
+function toggleSit() {
+  if (!bryce || !bench) return; // Bryce only
+  if (mode !== 'walk' || flying) return;
+  if (sitState === 'stand') {
+    const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
+    if (d > SIT_RANGE) return;
+    if (bryce.oneShot) return; // wait for a move (e.g. punch) to finish
+    if (!bryce.clips['Sitting'] || !bryce.clips['Sitting Idle']) return;
+    // snap to the sit spot (v1: no walk-up animation)
+    sitState = 'sitting';
+    charPos.copy(bench.sitPos);
+    charYaw = bench.yaw;
+    charGroup.position.copy(charPos);
+    charGroup.rotation.y = charYaw;
+    bryce.group.position.copy(charPos);
+    bryce.group.rotation.y = charYaw;
+    if (!playOneShot('Sitting', () => {
+      if (sitState !== 'sitting') return; // cancelled (mode switch / reset)
+      sitState = 'seated';
+      playLoco('Sitting Idle');
+    })) sitState = 'stand';
+  } else if (sitState === 'seated') {
+    if (bryce.oneShot) return;
+    if (!bryce.clips['Stand Up']) return;
+    sitState = 'standing';
+    if (!playOneShot('Stand Up', () => {
+      if (sitState !== 'standing') return; // cancelled
+      sitState = 'stand';
+      playLoco('Idle');
+    })) sitState = 'seated';
+  }
+  // 'sitting' / 'standing' transitions ignore E
+}
+
+function cancelSit() {
+  // force back to standing (mode switch / respawn). The in-flight
+  // one-shot (if any) still finishes on its own, but its onDone is
+  // guarded by sitState and returns early; updateWalk's playLoco('Idle')
+  // then takes over on the next frame.
+  if (sitState === 'stand') return;
+  sitState = 'stand';
+}
+
+const sitPromptEl = document.getElementById('sit-prompt');
+const sitBtnEl = document.getElementById('sitBtn');
+let lastSitPrompt = null;
+function updateSitPrompt() {
+  let text = '';
+  if (bench && bryce && mode === 'walk') {
+    if (sitState === 'seated' || sitState === 'sitting') text = '按 E 站起來';
+    else if (sitState === 'stand' && !flying) {
+      const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
+      if (d <= SIT_RANGE) text = '按 E 坐下';
+    }
+  }
+  if (text !== lastSitPrompt) {
+    lastSitPrompt = text;
+    sitPromptEl.textContent = text;
+    sitPromptEl.style.display = text ? 'block' : 'none';
+    sitBtnEl.textContent = (sitState === 'seated' || sitState === 'sitting') ? '站起來 (E)' : '坐下 (E)';
+  }
+}
+
 function updateWalk(dt) {
   // movement relative to the camera's view direction
   const fwd = new THREE.Vector3(charPos.x - camera.position.x, 0, charPos.z - camera.position.z);
@@ -1321,15 +1458,17 @@ function updateWalk(dt) {
     move.addScaledVector(right, joy.x);
   }
   moving = move.lengthSq() > 0;
-  // martial arts: plant the feet while a move is playing
+  // martial arts: plant the feet while a move is playing; same while
+  // sitting down / seated / standing up
   const pose = actionPose(clock.elapsedTime);
-  if (pose || (bryce && bryce.oneShot)) { move.set(0, 0, 0); moving = false; }
+  if (pose || (bryce && bryce.oneShot) || sitState !== 'stand') { move.set(0, 0, 0); moving = false; }
   const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
   const wantFly = keys['Space'] || touchFlyUp;
   const wantDown = keys['ControlLeft'] || keys['ControlRight'] || touchFlyDown;
-  // vertical: hold Space to fly up, Ctrl to descend; otherwise hover
+  // vertical: hold Space to fly up, Ctrl to descend; otherwise hover.
+  // No flying while seated.
   let vy = 0;
-  if (wantFly) { flying = true; vy = 12; }
+  if (wantFly && sitState === 'stand') { flying = true; vy = 12; }
   if (wantDown) { vy = -12; }
   if (moving) {
     // analog stick: slight push = slow walk (keyboard input is always
@@ -1366,7 +1505,10 @@ function updateWalk(dt) {
   if (bryce) {
     bryce.group.position.copy(charPos);
     bryce.group.rotation.y = charYaw;
-    playLoco(flying ? 'Idle' : (!moving ? 'Idle' : (running ? 'Running' : 'Walking')));
+    // seated: hold the Sitting Idle loop (the normal branch would
+    // override it with Idle every frame)
+    if (sitState === 'seated') playLoco('Sitting Idle');
+    else playLoco(flying ? 'Idle' : (!moving ? 'Idle' : (running ? 'Running' : 'Walking')));
   }
   // legs swing when running on the ground; dangle + lean forward when flying
   const swing = (moving && !flying) ? Math.sin(swingPhase) * 0.7 : 0;
@@ -1420,6 +1562,7 @@ function animate() {
   else controls.update();
   updateFerry(dt, clock.elapsedTime);
   if (bryce && bryce.mixer) bryce.mixer.update(dt);
+  updateSitPrompt();
   updateShadowFocus();
   updateNavHud(dt);
   renderer.render(scene, camera);
