@@ -447,7 +447,7 @@ const dropHint = document.getElementById('drop-hint');
 
 // Build label (test 11⑩: nothing on the page showed the version).
 // Shown on the main menu + the HUD stats line; bump on every push.
-const BUILD_VERSION = '2026-11-23-9';
+const BUILD_VERSION = '2026-11-23-10';
 document.getElementById('version-menu').textContent = '版本 ' + BUILD_VERSION;
 
 // ---------- renderer / scene ----------
@@ -2517,7 +2517,8 @@ function loadBryce() {
     const mixer = new THREE.AnimationMixer(group);
     const clips = {};
     for (const c of g.animations) clips[c.name] = c;
-    bryce = { group, mixer, clips, loco: null, oneShot: null, current: null };
+    bryce = { group, mixer, clips, loco: null, oneShot: null, current: null,
+      spine: group.getObjectByName('mixamorig:Spine'), rideLean: 0 };
     scene.add(group);
     charGroup.visible = false; // procedural character stands down
     playLoco('Idle');
@@ -2527,6 +2528,29 @@ function loadBryce() {
   }, undefined, () => {
     console.warn('bryce_animated.glb not found, using procedural character');
   });
+}
+// Riding tuck (EH98): the Riding clip is an upright pose — with the
+// hips on the EH98 seat the hands float 0.606m above and 0.358m behind
+// the grips (Blender-measured 2026-11-23). Bending the SPINE bone
+// forward (not the whole group, so the feet stay on the pegs) closes
+// about half the gap; the rest needs elbow IK (follow-up — the arms
+// are deeply bent in the clip, so shoulder rotation alone can't reach
+// the low cafe bars). The Spine bone's local X is the lateral axis
+// (rest rotation ~identity, parent chain rotates about X only), so a
+// positive local-X rotation pitches the torso forward. Applied after
+// mixer.update every frame; the mixer overwrites the bone each frame,
+// so no reset is needed when not riding. First-pass angle — tune by
+// playtest (see the EH98 note in the bike section).
+const RIDE_LEAN = 0.65; // radians of forward spine bend while riding
+const _rideLeanQ = new THREE.Quaternion();
+const _rideLeanAxis = new THREE.Vector3(1, 0, 0);
+function applyRideLean(dt) {
+  if (!bryce || !bryce.spine) return;
+  const target = (bikeState === 'riding' && bryce.clips['Riding']) ? 1 : 0;
+  bryce.rideLean += (target - bryce.rideLean) * Math.min(1, dt * 4);
+  if (bryce.rideLean < 0.01) return;
+  _rideLeanQ.setFromAxisAngle(_rideLeanAxis, RIDE_LEAN * bryce.rideLean);
+  bryce.spine.quaternion.multiply(_rideLeanQ);
 }
 function bryceFadeTo(action, dur) {
   if (bryce.current === action) return;
@@ -4052,35 +4076,37 @@ function updateDrive(dt) {
 // patch was prepared). Riding is Bryce-only. State machine:
 // 'none' -> F near the bike -> 'mounting' (instant in v1: no get-on
 // clip exists in CMU/Mixamo, so the mount is a snap like sitting)
-// -> 'riding' (Riding loop, or Sitting Idle until the 19:00 retarget
-// lands; W/S throttle, A/D steering, lean into turns) -> F ->
-// 'dismounting' (instant snap to the ground beside the bike) ->
-// 'none'. Collision: collideBike() — one circle (r=0.6) against the
-// baked footprint grid. The EH98 Cafe Racer GLB swaps in later: keep
-// the same bike object shape and the same MOUNT/SEAT locals (verify
-// them against the GLB's seat/handlebar/footpeg empties).
-let bike = null; // { group, pos, yaw, speed, lean }
+// -> 'riding' (Riding loop; W/S throttle, A/D steering, lean into
+// turns) -> F -> 'dismounting' (instant snap to the ground beside the
+// bike) -> 'none'. Collision: collideBike() — one circle (r=0.6)
+// against the baked footprint grid. The bike is the EH98 Cafe Racer
+// GLB from R2 (independent load, like Bryce); the procedural bike
+// survives as a load-error fallback (buildProceduralBike).
+let bike = null; // { group, pos, yaw, speed, lean, seatLocal, seatLocalFallback, wheelF, wheelR, steer, steerBaseX, wheelFBaseX, spinF, spinR, steerAngle, stand, eh98 }
 let bikeState = 'none';
 const BIKE_RANGE = 3;
 const BIKE_ACCEL = 10, BIKE_BRAKE = 24, BIKE_DRAG = 0.9;
 const BIKE_MAX_SPEED = 24, BIKE_MAX_FAST = 38, BIKE_MAX_REVERSE = 5; // quicker + faster than the car (15/25 -> 19.5/32.5); tune by playtest
 const BIKE_LEAN_MAX = 0.3; // max roll into a turn (radians)
+const BIKE_WHEEL_R_F = 0.31, BIKE_WHEEL_R_R = 0.32; // EH98 measured wheel radii (m)
+const BIKE_STEER_MAX = 0.35; // max fork yaw (radians)
 const BIKE_MOUNT_LOCAL = new THREE.Vector3(0.8, 0, 0); // left side, like mounting a real bike
-// Seat height: the Riding clip's hips sit 0.113m above the character
-// origin (measured from bryce_animated.glb v2, 2026-11-23), so the
-// origin rides at 0.80 - 0.113 = 0.69m to put the hips on the seat
-// (seat box top is 0.85m; 0.80 is the old Sitting Idle calibration, a
-// slight sink that reads as weight on the seat). The Sitting Idle
-// fallback (hips 0.534m) keeps its playtest-verified 0.35 offset —
-// updateRide picks per clip, so a cached old .glb doesn't float the
-// rider 0.37m above the seat.
-// Known mismatch (playtest): the Riding clip's feet dangle 0.58m BELOW
-// the origin (0.11m above the ground when seated) and its hands reach
-// 0.28m forward at 0.69m above the origin — about 0.38m above and
-// 0.37m behind the procedural handlebar. The bars/pegs belong to the
-// bike model, not the seat offset; revisit when the EH98 bike lands.
-const BIKE_SEAT_LOCAL = new THREE.Vector3(0, 0.69, -0.1);
-const BIKE_SEAT_LOCAL_FALLBACK = new THREE.Vector3(0, 0.35, -0.1); // Sitting Idle (old 12-clip .glb)
+// Seat (EH98, Blender-measured 2026-11-23): Seat empty at 0.93m,
+// grips at 0.90m (0.62m ahead of the seat, 0.03m BELOW it — low cafe
+// bars), pegs at 0.38m (directly under the seat). The model faces -Z
+// and turns 180° inside the group, so the seat sits at group z=-0.22.
+// Riding hips are 0.113m above the character origin, so the origin
+// rides at 0.93 - 0.113 = 0.817m; Sitting Idle hips (0.534m) take
+// 0.93 - 0.534 = 0.396m. updateRide picks per clip, so a cached old
+// .glb doesn't float the rider above the seat.
+// Hands: the upright Riding clip leaves the hands 0.606m above and
+// 0.358m behind the grips with the hips on the seat; applyRideLean
+// bends the spine forward to close about half of that (feet stay on
+// the pegs — 0.155m off, good enough). Full closure needs elbow IK.
+const BIKE_SEAT_LOCAL = new THREE.Vector3(0, 0.817, -0.22);
+const BIKE_SEAT_LOCAL_FALLBACK = new THREE.Vector3(0, 0.396, -0.22); // Sitting Idle (old 12-clip .glb)
+const BIKE_SEAT_LOCAL_PROC = new THREE.Vector3(0, 0.69, -0.1); // procedural fallback: seat box top 0.85m
+const BIKE_SEAT_LOCAL_PROC_FALLBACK = new THREE.Vector3(0, 0.35, -0.1);
 
 function bikeLocalToWorld(local) {
   // rotate a bike-local offset by the bike's yaw, add the bike position
@@ -4092,6 +4118,7 @@ function bikeLocalToWorld(local) {
   );
 }
 
+const EH98_BIKE_URL = 'https://pub-416445574a884243bd824c17d0b5a289.r2.dev/cafe_racer.glb';
 function createBike() {
   if (bike) { scene.remove(bike.group); bike = null; }
   if (!model) return;
@@ -4101,6 +4128,44 @@ function createBike() {
   const sz = SPAWN_RAW.z - modelCenter.z + 10;
   const by = groundHeight(sx, sz, 50);
   const g = new THREE.Group();
+  g.position.set(sx, by, sz);
+  g.rotation.y = 0; // facing south (+Z), same as the spawn
+  scene.add(g);
+  bike = { group: g, pos: new THREE.Vector3(sx, by, sz), yaw: 0, speed: 0, lean: 0,
+    seatLocal: BIKE_SEAT_LOCAL, seatLocalFallback: BIKE_SEAT_LOCAL_FALLBACK,
+    wheelF: null, wheelR: null, steer: null, steerBaseX: 0, wheelFBaseX: 0,
+    spinF: 0, spinR: 0, steerAngle: 0, stand: null, eh98: false };
+  // EH98 Cafe Racer: independent .glb from R2 (like bryce_animated.glb,
+  // NOT merged into the map file). The GLB faces -Z; the demo's bike
+  // convention faces +Z, so the model turns 180° inside the group.
+  // The bike object exists immediately (tryBike/prompt don't wait for
+  // the 321KB download); the callbacks guard against a stale load.
+  loader.load(EH98_BIKE_URL, (gl) => {
+    if (!bike || bike.group !== g) return;
+    const m = gl.scene;
+    m.rotation.y = Math.PI;
+    m.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    g.add(m);
+    bike.wheelF = m.getObjectByName('Wheel_F');
+    bike.wheelR = m.getObjectByName('Wheel_R');
+    bike.steer = m.getObjectByName('Steer');
+    bike.stand = m.getObjectByName('Stand');
+    if (bike.wheelF) bike.wheelFBaseX = bike.wheelF.rotation.x;
+    if (bike.steer) bike.steerBaseX = bike.steer.rotation.x;
+    bike.eh98 = true;
+    console.log('EH98 Cafe Racer loaded');
+  }, undefined, () => {
+    if (!bike || bike.group !== g) return;
+    console.warn('cafe_racer.glb not found, using procedural bike');
+    buildProceduralBike(g);
+    bike.seatLocal = BIKE_SEAT_LOCAL_PROC;
+    bike.seatLocalFallback = BIKE_SEAT_LOCAL_PROC_FALLBACK;
+  });
+}
+
+function buildProceduralBike(g) {
+  // fallback if the EH98 .glb fails to load (same pattern as the
+  // procedural character): the old box-built bike, kept working.
   const paint = new THREE.MeshStandardMaterial({ color: 0x8a2020, roughness: 0.35, metalness: 0.6 });
   const frame = new THREE.MeshStandardMaterial({ color: 0x2f3336, roughness: 0.5, metalness: 0.6 });
   const tyre = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
@@ -4149,10 +4214,6 @@ function createBike() {
     g.add(hub);
   }
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  g.position.set(sx, by, sz);
-  g.rotation.y = 0; // facing south (+Z), same as the spawn
-  scene.add(g);
-  bike = { group: g, pos: new THREE.Vector3(sx, by, sz), yaw: 0, speed: 0, lean: 0 };
 }
 
 function tryBike() {
@@ -4204,6 +4265,7 @@ function exitBikeToGround() {
   _prevPos.copy(charPos); // so the speedometer doesn't spike on the dismount snap (same as the car exit fix)
   bike.lean = 0;
   bike.group.rotation.z = 0;
+  if (bike.stand) bike.stand.visible = true; // kickstand back down
   bikeState = 'none';
   playLoco('Idle');
 }
@@ -4305,6 +4367,19 @@ function updateRide(dt) {
   bike.pos.y += (gy - bike.pos.y) * Math.min(1, dt * 6);
   bike.group.position.copy(bike.pos);
   bike.group.rotation.set(0, bike.yaw, bike.lean);
+  // EH98: spin the wheels (axles are local X; the model faces -Z, so
+  // forward motion is a negative local-X spin) and steer the fork with
+  // the input (eased); the kickstand hides while riding. All no-ops
+  // until the .glb lands (or for the procedural fallback).
+  if (bike.eh98) {
+    bike.spinF -= (bike.speed * dt) / BIKE_WHEEL_R_F;
+    bike.spinR -= (bike.speed * dt) / BIKE_WHEEL_R_R;
+    if (bike.wheelF) bike.wheelF.rotation.x = bike.wheelFBaseX + bike.spinF;
+    if (bike.wheelR) bike.wheelR.rotation.x = bike.spinR;
+    bike.steerAngle += (THREE.MathUtils.clamp(steer, -1, 1) * BIKE_STEER_MAX - bike.steerAngle) * Math.min(1, dt * 8);
+    if (bike.steer) bike.steer.rotation.set(bike.steerBaseX, bike.steerAngle, 0);
+    if (bike.stand) bike.stand.visible = false;
+  }
   // the character rides along: nav HUD + shadow focus track charPos
   charPos.copy(bike.pos);
   charYaw = bike.yaw;
@@ -4312,8 +4387,10 @@ function updateRide(dt) {
   charGroup.rotation.y = charYaw;
   if (bryce) {
     // seat offset matches the clip: Riding hips are 0.113m above the
-    // origin, Sitting Idle hips 0.534m — one offset can't serve both
-    const seatLocal = bryce.clips['Riding'] ? BIKE_SEAT_LOCAL : BIKE_SEAT_LOCAL_FALLBACK;
+    // origin, Sitting Idle hips 0.534m — one offset can't serve both.
+    // The offsets live on the bike object so the procedural fallback
+    // (different seat height) can swap them in on load error.
+    const seatLocal = bryce.clips['Riding'] ? bike.seatLocal : bike.seatLocalFallback;
     bryce.group.position.copy(bikeLocalToWorld(seatLocal));
     bryce.group.rotation.set(0, bike.yaw, bike.lean);
     playLoco(bryce.clips['Riding'] ? 'Riding' : 'Sitting Idle');
@@ -5038,6 +5115,7 @@ function animate() {
   else controls.update();
   updateFerry(dt, clock.elapsedTime);
   if (bryce && bryce.mixer) bryce.mixer.update(dt);
+  applyRideLean(dt); // riding tuck, after the mixer so it isn't overwritten
   updateNpcs(dt);
   updatePet(dt);
   updateSitPrompt();
