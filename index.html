@@ -122,6 +122,12 @@
     border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
     display: none; pointer-events: none;
   }
+  #bike-prompt {
+    position: fixed; bottom: 294px; left: 50%; transform: translateX(-50%); z-index: 11;
+    color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
+    display: none; pointer-events: none;
+  }
   /* sleep fade: black overlay for the no-clip fallback (1s fade each way).
      z-index 20 covers the HUD/prompts/toast, stays under the menus (30+). */
   #sleep-fade {
@@ -174,6 +180,7 @@
     #car-prompt { bottom: 310px; }
     #eat-prompt { bottom: 360px; }
     #sleep-prompt { bottom: 410px; }
+    #bike-prompt { bottom: 460px; }
     #uiToggle { bottom: 100px; right: 20px; } /* above the 64px touch buttons (top edge 84px) */
     #menuBtn { bottom: 158px; right: 20px; } /* above #uiToggle (100 + 48 + 10) */
   }
@@ -223,16 +230,18 @@
     <button id="sitBtn" class="secondary">坐下 (E)</button>
     <button id="sleepBtn" class="secondary">睡覺 (E)</button>
     <button id="carBtn" class="secondary">上車 (F)</button>
+    <button id="bikeBtn" class="secondary">騎車 (F)</button>
   </div>
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
 
-<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下／吃飯／睡覺 · F 上車 · T 喝水 · H 收起介面</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車：搖桿上推加速、左右轉向 · 右下角按鈕收起介面</span></div>
+<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下／吃飯／睡覺 · F 上車／騎車 · T 喝水 · H 收起介面</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車／騎車：搖桿上推加速、左右轉向 · 右下角按鈕收起介面</span></div>
 <div id="toast"></div>
 <div id="sit-prompt"></div>
 <div id="car-prompt"></div>
 <div id="eat-prompt"></div>
 <div id="sleep-prompt"></div>
+<div id="bike-prompt"></div>
 <div id="sleep-fade"></div>
 <div id="nav-hud">
   <div id="nav-speed">0</div>
@@ -255,19 +264,20 @@
   <div class="panel">
     <h1>Project GO</h1>
     <p class="sub">尖沙咀 3D · 自由探索</p>
-    <p class="pitch">在尖沙咀自由探索——步行、開車、坐下休息、打拳</p>
+    <p class="pitch">在尖沙咀自由探索——步行、開車、騎車、坐下休息、打拳</p>
     <button id="menu-start" class="qc-btn menu-start">開始遊戲</button>
     <button id="menu-settings" class="qc-btn secondary menu-start">設定</button>
     <p class="menu-section">可以做的事</p>
     <ul class="menu-list">
       <li>🚶 <span class="label">步行探索</span>——尖沙咀碼頭、海濱、廣東道</li>
       <li>🚗 <span class="label">開車</span>——走到車旁按 F（手機點「上車」）</li>
+      <li>🏍️ <span class="label">騎車</span>——走到機車旁按 F（手機點「騎車」）</li>
       <li>🪑 <span class="label">坐下休息</span>——走到長椅按 E（手機點「坐下」）</li>
       <li>🥊 <span class="label">打拳</span>——J 出拳、K 出腿、L 連招</li>
     </ul>
     <div class="menu-controls">
       <h2>操作說明</h2>
-      <p><span class="touch-help">左搖桿移動 · 拖曳轉鏡頭 · 右下按鈕：跑／升／降 · 開車：搖桿上推加速、左右轉向</span><span class="kb-help">WASD 移動 · Shift 跑 · 空白鍵飛 · 滑鼠轉鏡頭 · 滾輪縮放 · E 坐下 · F 上車 · T 喝水 · H 收起介面 · Esc 選單</span></p>
+      <p><span class="touch-help">左搖桿移動 · 拖曳轉鏡頭 · 右下按鈕：跑／升／降 · 開車／騎車：搖桿上推加速、左右轉向</span><span class="kb-help">WASD 移動 · Shift 跑 · 空白鍵飛 · 滑鼠轉鏡頭 · 滾輪縮放 · E 坐下 · F 上車／騎車 · T 喝水 · H 收起介面 · Esc 選單</span></p>
     </div>
     <p class="note">地圖資料：香港特區政府地政總署 · 3D-BIT00 · CSDI</p>
   </div>
@@ -280,7 +290,7 @@
     <button id="pause-settings" class="qc-btn secondary menu-start">設定</button>
     <div class="menu-controls">
       <h2>操作說明</h2>
-      <p><span class="touch-help">左搖桿移動 · 拖曳轉鏡頭 · 開車：搖桿上推加速、左右轉向</span><span class="kb-help">WASD 移動 · E 坐下 · F 上車 · T 喝水 · H 收起介面 · Esc 選單</span></p>
+      <p><span class="touch-help">左搖桿移動 · 拖曳轉鏡頭 · 開車／騎車：搖桿上推加速、左右轉向</span><span class="kb-help">WASD 移動 · E 坐下 · F 上車／騎車 · T 喝水 · H 收起介面 · Esc 選單</span></p>
     </div>
     <button id="pause-restart" class="qc-btn secondary menu-start">重新開始</button>
     <p class="note">地圖資料：香港特區政府地政總署 · 3D-BIT00 · CSDI</p>
@@ -1225,12 +1235,15 @@ document.getElementById('eatBtn').addEventListener('click', () => eatFood());
 document.getElementById('sitBtn').addEventListener('click', () => toggleSit());
 document.getElementById('sleepBtn').addEventListener('click', () => trySleep());
 document.getElementById('carBtn').addEventListener('click', () => toggleCar());
+document.getElementById('bikeBtn').addEventListener('click', () => tryBike());
 
 function spawnCharacter() {
   // teleporting while seated would leave the character sitting in mid-air
   if (sitState !== 'stand') cancelSit();
   // same while driving: drop out of the car first
   if (carState !== 'none') cancelCar();
+  // same while riding: get off the bike first
+  if (bikeState !== 'none') cancelBike();
   // same while asleep: wake up first (no wake-up animation — just
   // reset so the teleport can't leave the character lying mid-air)
   if (sleepState !== 'awake') cancelSleep();
@@ -1293,6 +1306,8 @@ function setMode(m) {
   // same while driving: get out of the car first (no exit animation —
   // just snap back to the ground so the mode switch can't get stuck)
   if (carState !== 'none') cancelCar();
+  // same while riding: get off the bike first
+  if (bikeState !== 'none') cancelBike();
   // same while asleep: wake up first (flying off while asleep would
   // freeze the lying pose)
   if (sleepState !== 'awake') cancelSleep();
@@ -1356,6 +1371,7 @@ function onLoaded(gltf, name) {
   spawnCharacter();
   createBench();
   createCar();
+  createBike();
   createStall();
   createBed();
   createPierDeck();
@@ -1638,7 +1654,7 @@ window.addEventListener('keydown', (e) => {
     else if (e.code === 'KeyK') startAction('kick');
     else if (e.code === 'KeyL') startAction('combo');
     else if (e.code === 'KeyE') tryInteract(); // E is contextual: nearest in-range interaction wins (bench / stall / bed); already asleep or seated exits first
-    else if (e.code === 'KeyF') toggleCar();
+    else if (e.code === 'KeyF') toggleVehicle();
     else if (e.code === 'KeyT') drinkWater();
     else if (e.code === 'KeyH') setUICollapsed(!uiCollapsed);
     else if (e.code === 'Escape') { if (settingsOpen) closeSettings(); else setPauseMenu(!pauseOpen); }
@@ -1772,6 +1788,7 @@ function startAction(name) {
   if (mode !== 'walk' || flying) return;
   if (sitState !== 'stand') return; // no martial arts while sitting down
   if (carState !== 'none') return; // no martial arts while in the car
+  if (bikeState !== 'none') return; // no martial arts while riding
   if (sleepState !== 'awake') return; // no martial arts while asleep
   // rigged character: play the Mixamo clip instead of the procedural pose
   if (bryce) {
@@ -1878,6 +1895,7 @@ function drinkWater() {
   if (mode !== 'walk' || flying) return;
   if (sitState !== 'stand') return; // not while sitting down
   if (carState !== 'none') return; // not while in the car
+  if (bikeState !== 'none') return; // not while riding
   playOneShot('Drinking');
 }
 
@@ -2116,6 +2134,7 @@ function toggleSit() {
   if (!bryce || !bench) return; // Bryce only
   if (mode !== 'walk' || flying) return;
   if (carState !== 'none') return; // can't sit down while in the car
+  if (bikeState !== 'none') return; // can't sit down while riding
   if (sitState === 'stand') {
     const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
     if (d > SIT_RANGE) return;
@@ -2490,6 +2509,7 @@ function eatFood() {
   if (mode !== 'walk' || flying) return;
   if (sitState !== 'stand') return;
   if (carState !== 'none') return;
+  if (bikeState !== 'none') return;
   const d = Math.hypot(charPos.x - stall.pos.x, charPos.z - stall.pos.z);
   if (d > EAT_RANGE) return;
   if (bryce && bryce.oneShot) return; // wait for a move to finish
@@ -2666,6 +2686,7 @@ function trySleep() {
   if (mode !== 'walk' || flying) return;
   if (sitState !== 'stand') return; // not while sitting down
   if (carState !== 'none') return; // not while in the car
+  if (bikeState !== 'none') return; // not while riding
   if (sleepState === 'awake') {
     const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
     if (d > SLEEP_RANGE) return;
@@ -2833,11 +2854,312 @@ function updateDrive(dt) {
     bryce.group.rotation.y = car.yaw;
     playLoco('Driving');
   }
-  // chase camera: behind the car at the walk-mode distance (wheel works)
+  // chase camera: orbit with the walk camera's yaw (drag works while
+  // driving, so the player can swing to the side and see the driver),
+  // at a LOW pitch — the seated head-top (1.42m) is only 5cm below the
+  // roof underside, so a high camera looks over the roof and the driver
+  // is invisible (measured: the chase cam's sight line to the head hits
+  // the roof slab). drivePitch is local: camPitch itself is untouched,
+  // so the walk camera is unaffected after exiting.
   const target = new THREE.Vector3(car.pos.x, car.pos.y + 2.2, car.pos.z);
+  const drivePitch = Math.min(camPitch, 0.10);
+  const off = new THREE.Vector3(
+    Math.sin(camYaw) * Math.cos(drivePitch),
+    Math.sin(drivePitch),
+    Math.cos(camYaw) * Math.cos(drivePitch)
+  ).multiplyScalar(camDist);
+  const desired = target.clone().add(off);
+  camera.position.lerp(desired, Math.min(1, dt * 5));
+  camera.lookAt(target);
+}
+
+// ---------- motorcycle + riding (CMU 128_01 Riding / Sitting Idle fallback) ----------
+// One procedural motorcycle on the pier plaza, 10m south-east of the
+// spawn (x +8, z +10), facing the harbour (+Z, same as the spawn).
+// Clear of the bench (spawn south 6m), the car (spawn north 9m) and
+// the food stall (~8m east of spawn) — re-check the stall distance
+// at merge time (the stall section was still being written when this
+// patch was prepared). Riding is Bryce-only. State machine:
+// 'none' -> F near the bike -> 'mounting' (instant in v1: no get-on
+// clip exists in CMU/Mixamo, so the mount is a snap like sitting)
+// -> 'riding' (Riding loop, or Sitting Idle until the 19:00 retarget
+// lands; W/S throttle, A/D steering, lean into turns) -> F ->
+// 'dismounting' (instant snap to the ground beside the bike) ->
+// 'none'. Collision: collideBike() — one circle (r=0.6) against the
+// baked footprint grid. The EH98 Cafe Racer GLB swaps in later: keep
+// the same bike object shape and the same MOUNT/SEAT locals (verify
+// them against the GLB's seat/handlebar/footpeg empties).
+let bike = null; // { group, pos, yaw, speed, lean }
+let bikeState = 'none';
+const BIKE_RANGE = 3;
+const BIKE_ACCEL = 10, BIKE_BRAKE = 24, BIKE_DRAG = 0.9;
+const BIKE_MAX_SPEED = 24, BIKE_MAX_FAST = 38, BIKE_MAX_REVERSE = 5; // quicker + faster than the car (15/25 -> 19.5/32.5); tune by playtest
+const BIKE_LEAN_MAX = 0.3; // max roll into a turn (radians)
+const BIKE_MOUNT_LOCAL = new THREE.Vector3(0.8, 0, 0); // left side, like mounting a real bike
+// Feet at footpeg height (0.35m): the Sitting Idle fallback puts the
+// hips ~0.45m above the feet, so 0.35 + 0.45 = 0.80m = the seat top.
+// Re-verify against the real Riding clip at the 19:00 retarget: if
+// its hips sit at H above the clip's feet, this offset becomes (0.8 - H).
+const BIKE_SEAT_LOCAL = new THREE.Vector3(0, 0.35, -0.1);
+
+function bikeLocalToWorld(local) {
+  // rotate a bike-local offset by the bike's yaw, add the bike position
+  const c = Math.cos(bike.yaw), s = Math.sin(bike.yaw);
+  return new THREE.Vector3(
+    bike.pos.x + local.x * c + local.z * s,
+    bike.pos.y + local.y,
+    bike.pos.z - local.x * s + local.z * c
+  );
+}
+
+function createBike() {
+  if (bike) { scene.remove(bike.group); bike = null; }
+  if (!model) return;
+  // 10m south-east of the spawn on the open plaza (17m+ clear of
+  // buildings): 8m east, 10m south of the spawn point
+  const sx = SPAWN_RAW.x - modelCenter.x + 8;
+  const sz = SPAWN_RAW.z - modelCenter.z + 10;
+  const by = groundHeight(sx, sz, 50);
+  const g = new THREE.Group();
+  const paint = new THREE.MeshStandardMaterial({ color: 0x8a2020, roughness: 0.35, metalness: 0.6 });
+  const frame = new THREE.MeshStandardMaterial({ color: 0x2f3336, roughness: 0.5, metalness: 0.6 });
+  const tyre = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+  const seatMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+  const chrome = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.4, metalness: 0.7 });
+  const light = new THREE.MeshStandardMaterial({ color: 0xfff6c9, roughness: 0.3, emissive: 0x555533 });
+  const tail = new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.3, emissive: 0x550000 });
+  const box = (w, h, d, m, x, y, z, rx = 0) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    b.rotation.x = rx;
+    g.add(b);
+    return b;
+  };
+  box(0.16, 0.22, 1.3, frame, 0, 0.55, 0);          // frame
+  box(0.34, 0.26, 0.5, paint, 0, 0.78, 0.15);       // fuel tank
+  box(0.3, 0.1, 0.55, seatMat, 0, 0.8, -0.35);      // seat (top 0.85m)
+  box(0.2, 0.05, 0.4, paint, 0, 0.68, 0.75);        // front fender
+  box(0.16, 0.12, 0.06, light, 0, 0.82, 0.86);      // headlight
+  box(0.12, 0.06, 0.04, tail, 0, 0.72, -0.95);      // tail light
+  // handlebar + steering column (column leans back toward the rider)
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.6, 8), chrome);
+  bar.rotation.z = Math.PI / 2;
+  bar.position.set(0, 1.0, 0.55);
+  g.add(bar);
+  const column = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8), frame);
+  column.rotation.x = -0.4;
+  column.position.set(0, 0.75, 0.62);
+  g.add(column);
+  // exhaust pipe, right side
+  const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 10), chrome);
+  exhaust.rotation.x = Math.PI / 2;
+  exhaust.position.set(0.14, 0.32, -0.3);
+  g.add(exhaust);
+  // wheels: 0.33m radius, 1.5m wheelbase (front +0.75, rear -0.75)
+  const wheelGeo = new THREE.CylinderGeometry(0.33, 0.33, 0.12, 16);
+  const hubGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.14, 12);
+  for (const wz of [0.75, -0.75]) {
+    const w = new THREE.Mesh(wheelGeo, tyre);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(0, 0.33, wz);
+    g.add(w);
+    const hub = new THREE.Mesh(hubGeo, chrome);
+    hub.rotation.z = Math.PI / 2;
+    hub.position.set(0, 0.33, wz);
+    g.add(hub);
+  }
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(sx, by, sz);
+  g.rotation.y = 0; // facing south (+Z), same as the spawn
+  scene.add(g);
+  bike = { group: g, pos: new THREE.Vector3(sx, by, sz), yaw: 0, speed: 0, lean: 0 };
+}
+
+function tryBike() {
+  if (!bryce || !bike) return; // Bryce only
+  if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return; // can't ride while sitting down
+  if (carState !== 'none') return; // can't ride while in the car
+  if (bikeState === 'none') {
+    const d = Math.hypot(charPos.x - bike.pos.x, charPos.z - bike.pos.z);
+    if (d > BIKE_RANGE) return;
+    if (bryce.oneShot) return; // wait for a move (e.g. punch) to finish
+    // snap beside the bike (v1: no mount animation — no get-on clip
+    // exists in CMU/Mixamo; the mount is a snap like sitting)
+    bikeState = 'mounting';
+    const mount = bikeLocalToWorld(BIKE_MOUNT_LOCAL);
+    charPos.set(mount.x, groundHeight(mount.x, mount.z, bike.pos.y), mount.z);
+    charYaw = bike.yaw;
+    charGroup.position.copy(charPos);
+    charGroup.rotation.y = charYaw;
+    bryce.group.position.copy(charPos);
+    bryce.group.rotation.y = charYaw;
+    bryce.group.rotation.z = 0;
+    bikeState = 'riding';
+    playLoco(bryce.clips['Riding'] ? 'Riding' : 'Sitting Idle');
+  } else if (bikeState === 'riding') {
+    if (bryce.oneShot) return;
+    bikeState = 'dismounting';
+    bike.speed = 0;
+    exitBikeToGround();
+  }
+  // 'mounting' / 'dismounting' are instant in v1 (no clips) — the
+  // states exist so a future mount/dismount clip can hook in here,
+  // mirroring the car's 'entering' / 'exiting'.
+}
+
+function exitBikeToGround() {
+  // Bryce back on the ground beside the bike, walk mode resumes.
+  // Reset the lean on BOTH groups: updateWalk only ever sets
+  // rotation.y, so a leftover rotation.z would tilt the rider forever.
+  const mount = bikeLocalToWorld(BIKE_MOUNT_LOCAL);
+  charPos.set(mount.x, groundHeight(mount.x, mount.z, bike.pos.y), mount.z);
+  charYaw = bike.yaw;
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  bryce.group.position.copy(charPos);
+  bryce.group.rotation.y = charYaw;
+  bryce.group.rotation.z = 0;
+  bike.lean = 0;
+  bike.group.rotation.z = 0;
+  bikeState = 'none';
+  playLoco('Idle');
+}
+
+function cancelBike() {
+  // force off the bike without the animation (mode switch / respawn).
+  // Same shape as cancelCar: the in-flight state is reset here and
+  // updateWalk's playLoco('Idle') takes over on the next frame.
+  if (bikeState === 'none') return;
+  if (bike) exitBikeToGround(); // also resets bikeState + plays Idle
+  else bikeState = 'none';
+}
+
+const bikePromptEl = document.getElementById('bike-prompt');
+const bikeBtnEl = document.getElementById('bikeBtn');
+let lastBikePrompt = null;
+function updateBikePrompt() {
+  let text = '';
+  if (bike && bryce && mode === 'walk') {
+    if (bikeState === 'riding' || bikeState === 'mounting') text = '按 F 下車';
+    else if (bikeState === 'none' && !flying) {
+      const d = Math.hypot(charPos.x - bike.pos.x, charPos.z - bike.pos.z);
+      if (d <= BIKE_RANGE) text = '按 F 騎車';
+    }
+  }
+  if (text !== lastBikePrompt) {
+    lastBikePrompt = text;
+    bikePromptEl.textContent = text;
+    bikePromptEl.style.display = text ? 'block' : 'none';
+    bikeBtnEl.textContent = (bikeState === 'riding' || bikeState === 'mounting') ? '下車 (F)' : '騎車 (F)';
+  }
+}
+
+// Bike collision: one circle at the bike centre (v1: the nose/tail can
+// clip a wall slightly at an angle — the bike is 2.2m long, the circle
+// is 1.2m across). A push stops the bike dead (same as the car).
+function collideBike() {
+  if (!footGrid || !bike) return;
+  if (collideFootprint(bike.pos, 0.6)) bike.speed = 0;
+}
+
+function updateRide(dt) {
+  // arcade riding, mirroring updateDrive: W/S (or the touch joystick)
+  // throttle + brake/reverse, A/D (or joystick left/right) steering,
+  // Shift for the faster top speed. The bike leans into turns
+  // (rotation.z on the bike group AND the rider — Euler order XYZ
+  // applies the Z roll around the local forward axis before the Y
+  // heading, which is exactly the lean we want).
+  const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
+  const maxSpeed = running ? BIKE_MAX_FAST : BIKE_MAX_SPEED;
+  let throttle = 0;
+  if (keys['KeyW']) throttle = 1;
+  else if (keys['KeyS']) throttle = -1;
+  else if (joy.active) throttle = -joy.y;
+  if (throttle > 0) bike.speed += BIKE_ACCEL * throttle * dt;
+  else if (throttle < 0) {
+    // brake hard while moving forward, reverse once stopped
+    bike.speed -= (bike.speed > 0.5 ? BIKE_BRAKE : BIKE_ACCEL * 0.6) * -throttle * dt;
+  } else {
+    // coast down: rolling drag + air drag (never overshoots past 0)
+    bike.speed -= Math.sign(bike.speed) * Math.min(Math.abs(bike.speed), (0.5 + Math.abs(bike.speed) * BIKE_DRAG) * dt);
+  }
+  bike.speed = THREE.MathUtils.clamp(bike.speed, -BIKE_MAX_REVERSE, maxSpeed);
+  // steering: needs motion (no turning at a standstill), reversed in reverse.
+  // Bikes turn quicker than the car (1.3 vs 1.1) — first guess, tune by playtest.
+  const steer = THREE.MathUtils.clamp(
+    (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0) - (joy.active ? joy.x : 0), -1, 1);
+  const grip = Math.min(1, Math.abs(bike.speed) / 4);
+  bike.yaw += steer * 1.3 * grip * Math.sign(bike.speed) * dt;
+  // lean: turning left (steer > 0) leans the top toward +X, the left
+  // side when facing +Z — that is a negative rotation.z. No lean at a
+  // standstill (grip = 0); eased so it doesn't snap.
+  const targetLean = -steer * BIKE_LEAN_MAX * grip;
+  bike.lean += (targetLean - bike.lean) * Math.min(1, dt * 6);
+  const fwd = new THREE.Vector3(Math.sin(bike.yaw), 0, Math.cos(bike.yaw));
+  bike.pos.addScaledVector(fwd, bike.speed * dt);
+  // stay inside the map (same bounds as the walker and the car)
+  if (bounds) {
+    let hit = false;
+    if (bike.pos.x < bounds.minX) { bike.pos.x = bounds.minX; hit = true; }
+    if (bike.pos.x > bounds.maxX) { bike.pos.x = bounds.maxX; hit = true; }
+    if (bike.pos.z < bounds.minZ) { bike.pos.z = bounds.minZ; hit = true; }
+    if (bike.pos.z > bounds.maxZ) { bike.pos.z = bounds.maxZ; hit = true; }
+    if (hit) { bike.speed = 0; showBoundaryToast(); }
+  }
+  // building collision first (stops the bike at walls), then the ground:
+  // on a road, ease toward the smooth road surface; off-road, back to
+  // the terrain heightfield. roadBlend/lastRoadH are shared with the
+  // car — only one vehicle drives at a time, and the blend re-derives
+  // from the current position every frame, so sharing is safe.
+  collideBike();
+  let gy = groundHeight(bike.pos.x, bike.pos.z, bike.pos.y);
+  const rh = roadHeight(bike.pos.x, bike.pos.z);
+  if (rh !== null) {
+    lastRoadH = rh;
+    roadBlend = Math.min(1, roadBlend + dt * 8);
+  } else {
+    roadBlend = Math.max(0, roadBlend - dt * 8);
+  }
+  if (roadBlend > 0) gy = gy + (lastRoadH - gy) * roadBlend;
+  bike.pos.y += (gy - bike.pos.y) * Math.min(1, dt * 6);
+  bike.group.position.copy(bike.pos);
+  bike.group.rotation.set(0, bike.yaw, bike.lean);
+  // the character rides along: nav HUD + shadow focus track charPos
+  charPos.copy(bike.pos);
+  charYaw = bike.yaw;
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  if (bryce) {
+    bryce.group.position.copy(bikeLocalToWorld(BIKE_SEAT_LOCAL));
+    bryce.group.rotation.set(0, bike.yaw, bike.lean);
+    playLoco(bryce.clips['Riding'] ? 'Riding' : 'Sitting Idle');
+  }
+  // chase camera: behind the bike at the walk-mode distance (wheel works)
+  const target = new THREE.Vector3(bike.pos.x, bike.pos.y + 2.2, bike.pos.z);
   const desired = target.clone().addScaledVector(fwd, -camDist).add(new THREE.Vector3(0, 2.5, 0));
   camera.position.lerp(desired, Math.min(1, dt * 5));
   camera.lookAt(target);
+}
+
+// F is shared by the car and the bike: if already driving/riding, F
+// exits that vehicle; otherwise F enters whichever vehicle is nearer
+// (both in range -> the nearer one wins). The keydown handler calls
+// this instead of toggleCar; the car/bike buttons still call their
+// own toggles directly.
+function toggleVehicle() {
+  if (carState === 'driving' || carState === 'entering' || carState === 'exiting') { toggleCar(); return; }
+  if (bikeState === 'riding' || bikeState === 'mounting' || bikeState === 'dismounting') { tryBike(); return; }
+  // neither vehicle occupied: nearest in-range vehicle wins
+  let carD = Infinity, bikeD = Infinity;
+  if (car && bryce) {
+    const door = carLocalToWorld(CAR_DOOR_LOCAL);
+    carD = Math.hypot(charPos.x - door.x, charPos.z - door.z);
+  }
+  if (bike && bryce) bikeD = Math.hypot(charPos.x - bike.pos.x, charPos.z - bike.pos.z);
+  if (carD <= CAR_RANGE && carD <= bikeD) toggleCar();
+  else if (bikeD <= BIKE_RANGE) tryBike();
+  // out of range of both: nothing (each toggle has its own range check)
 }
 
 // ---------- pier mid-section deck (fills the data gap in I35846) ----------
@@ -2885,6 +3207,7 @@ function createPierDeck() {
 function updateWalk(dt) {
   // driving: the car has its own update (movement, ground, camera)
   if (carState === 'driving') { updateDrive(dt); return; }
+  if (bikeState === 'riding') { updateRide(dt); return; }
   // movement relative to the camera's view direction
   const fwd = new THREE.Vector3(charPos.x - camera.position.x, 0, charPos.z - camera.position.z);
   if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
@@ -2905,14 +3228,14 @@ function updateWalk(dt) {
   // sitting down / seated / standing up, and while getting in/out of
   // the car (the one-shot's root motion does the moving, not the keys)
   const pose = actionPose(clock.elapsedTime);
-  if (pose || (bryce && bryce.oneShot) || sitState !== 'stand' || carState !== 'none' || sleepState !== 'awake') { move.set(0, 0, 0); moving = false; }
+  if (pose || (bryce && bryce.oneShot) || sitState !== 'stand' || carState !== 'none' || sleepState !== 'awake' || bikeState !== 'none') { move.set(0, 0, 0); moving = false; }
   const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
   const wantFly = keys['Space'] || touchFlyUp;
   const wantDown = keys['ControlLeft'] || keys['ControlRight'] || touchFlyDown;
   // vertical: hold Space to fly up, Ctrl to descend; otherwise hover.
   // No flying while seated or in the car.
   let vy = 0;
-  if (wantFly && sitState === 'stand' && carState === 'none' && sleepState === 'awake') { flying = true; vy = 12; }
+  if (wantFly && sitState === 'stand' && carState === 'none' && bikeState === 'none' && sleepState === 'awake') { flying = true; vy = 12; }
   if (wantDown) { vy = -12; }
   if (moving) {
     // analog stick: slight push = slow walk (keyboard input is always
@@ -2945,7 +3268,7 @@ function updateWalk(dt) {
   // don't walk through buildings (footprint grid; skipped while flying
   // — fly mode is for aerial inspection — and while sitting, asleep, or getting
   // in/out of the car, so the push-out never fights an animation)
-  if (!flying && sitState === 'stand' && carState === 'none' && sleepState === 'awake') collideFootprint(charPos, 0.4);
+  if (!flying && sitState === 'stand' && carState === 'none' && bikeState === 'none' && sleepState === 'awake') collideFootprint(charPos, 0.4);
   // vertical + ground (gy is reused by the fall check below, so it is
   // hoisted — the groundHeight calls keep their original order and refY)
   let gy;
@@ -3046,6 +3369,7 @@ function animate() {
   updateNpcs(dt);
   updateSitPrompt();
   updateCarPrompt();
+  updateBikePrompt();
   updateEatPrompt();
   updateSleepPrompt();
   updateBuffUI();
