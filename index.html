@@ -919,6 +919,27 @@ function onLoaded(gltf, name) {
   model.traverse((o) => {
     if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
   });
+  // Mobile: no mipmaps. Mipmaps cost +33% GPU texture memory and iOS
+  // kills the tab; on a phone screen the shimmer is barely visible.
+  if (isMobile) {
+    const seen = new Set();
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (!m) continue;
+        for (const key of Object.keys(m)) {
+          const v = m[key];
+          if (v && v.isTexture && !seen.has(v)) {
+            seen.add(v);
+            v.minFilter = THREE.LinearFilter;
+            v.generateMipmaps = false;
+            v.needsUpdate = true;
+          }
+        }
+      }
+    });
+  }
   scene.add(model);
   recenterDone = false;
   frameModel();
@@ -929,6 +950,9 @@ function onLoaded(gltf, name) {
   createFerry();
   spawnCharacter();
   setMode(mode); // apply the current mode to the fresh model
+  // Mobile: Bryce loads only after the map is done, so the two big
+  // .glb parses don't spike memory at the same time (iOS kills the tab).
+  if (isMobile && !bryce.group) loadBryce();
 }
 
 function onError(err) {
@@ -959,15 +983,17 @@ function loadFromFile(file) {
 }
 
 // ---------- entry: ?model= URL, else default .glb, else picker ----------
-// Mobile loads the lite map (256² textures) when it exists in the repo,
-// falling back to the full map if the lite file isn't there yet.
+// Mobile loads the ultra-lite map (128² textures) when it exists in the
+// repo, then lite (256²), then full. The 256² lite map alone still
+// exceeds the iOS tab memory limit (textures ~490MB + geometry ~150MB
+// + Bryce + decode peaks), so the phone needs the 128² version.
 const params = new URLSearchParams(location.search);
 const modelParam = params.get('model');
 if (modelParam) {
   loadFromUrl(modelParam, modelParam.split('/').pop());
 } else {
   const candidates = isMobile
-    ? ['./full_tst_tile_lite.glb', './full_tst_tile.glb']
+    ? ['./full_tst_tile_ulite.glb', './full_tst_tile_lite.glb', './full_tst_tile.glb']
     : ['./full_tst_tile.glb'];
   (function tryNext(i) {
     if (i >= candidates.length) { setStatus('尚未載入模型，請選擇 full_tst_tile.glb'); return; }
@@ -978,8 +1004,9 @@ if (modelParam) {
   })(0);
 }
 
-// rigged character (loads in parallel; the procedural one is the fallback)
-loadBryce();
+// rigged character: desktop loads it in parallel with the map; mobile
+// waits until the map is done (see onLoaded) to avoid a memory spike.
+if (!isMobile) loadBryce();
 
 // ---------- file picker + drag & drop ----------
 document.getElementById('pick').addEventListener('click', () => fileInput.click());
