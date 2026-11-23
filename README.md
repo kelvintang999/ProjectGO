@@ -1,5 +1,7 @@
 # ProjectGO
 
+Read this in [繁體中文](README.zh-TW.md).
+
 Tsim Sha Tsui open-world 3D demo in Three.js — a playable web prototype built from real Hong Kong 3D map data.
 
 Play it here: https://kttcat.github.io/ProjectGO/
