@@ -1921,12 +1921,13 @@ document.getElementById('set-pick').addEventListener('click', () => fileInput.cl
 // SHARE Ch42_Body with the body, so each mesh's material must be cloned
 // once before tinting, or the whole body changes color.
 // Mesh node names: Ch42_Shirt, Ch42_Shorts (getObjectByName on
-// bryce.group). Tints multiply the existing textures (MeshStandardMaterial
-// color × map), so white (0xffffff) = the original look.
+// bryce.group). Tinting drops the texture map (map = null) and sets a
+// flat colour: the shirt texture is red, so a multiply tint could never
+// produce the chosen colour. Reload restores the original textured look.
 // In-memory only: no persistence — a page reload restores the original
 // look (noted in the settings screen itself).
 
-// multiply tints; white = untinted (original texture colors)
+// flat-colour tints (map dropped on first tint — see tintBryceMesh)
 let shirtTint = 0xffffff;
 let shortsTint = 0xffffff;
 
@@ -1938,6 +1939,11 @@ function tintBryceMesh(nodeName, hex) {
   if (!mesh.material.userData.dressupCloned) {
     mesh.material = mesh.material.clone();
     mesh.material.userData.dressupCloned = true;
+    // the shirt/shorts textures are coloured (Bryce's shirt is red), so
+    // a multiply tint can never produce the chosen colour (red x blue
+    // can't make blue) — drop the map so the colour shows true (flat)
+    mesh.material.map = null;
+    mesh.material.needsUpdate = true;
   }
   mesh.material.color.set(hex);
   return true;
@@ -2246,7 +2252,7 @@ function spawnNpcs() {
   const sx = SPAWN_RAW.x - modelCenter.x;
   const sz = SPAWN_RAW.z - modelCenter.z;
   // NPC shirt/shorts colours — each NPC gets a different pair so they
-  // don't all look like Bryce (multiply tints, same as dress-up)
+  // don't all look like Bryce (flat colours, map dropped — same as dress-up)
   const NPC_SHIRTS = [0x4a7fb5, 0xb54a4a];
   const NPC_SHORTS = [0x3a3a3a, 0x8a7a5a];
   for (let i = 0; i < NPC_COUNT; i++) {
@@ -2262,6 +2268,10 @@ function spawnNpcs() {
       if (!o.isMesh || Array.isArray(o.material)) return;
       if (o.name === 'Ch42_Shirt' || o.name === 'Ch42_Shorts') {
         o.material = o.material.clone();
+        // same as dress-up: the textures are coloured, so drop the map
+        // or the tint multiplies against red and never shows true
+        o.material.map = null;
+        o.material.needsUpdate = true;
         o.material.color.setHex(o.name === 'Ch42_Shirt' ? NPC_SHIRTS[i % NPC_SHIRTS.length] : NPC_SHORTS[i % NPC_SHORTS.length]);
       }
     });
