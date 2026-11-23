@@ -16,6 +16,7 @@
   #hud h1 { font-size: 16px; margin: 0 0 4px; font-weight: 700; }
   #hud p { font-size: 12px; line-height: 1.6; margin: 4px 0; color: #b9c6da; white-space: pre-line; }
   #hud .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  #hud .row.hud-group { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.12); }
   button {
     font: inherit; font-size: 13px; color: #fff; background: #2563eb; border: 0;
     border-radius: 8px; padding: 8px 12px; cursor: pointer;
@@ -220,16 +221,15 @@
   <p id="health-text">體力 100/100</p>
   <p id="buff-text"></p>
   <div class="row">
-    <button id="pick">選擇 .glb 檔案</button>
-    <button id="reset" class="secondary">重置視角</button>
-    <button id="shadowToggle" class="secondary">陰影：開</button>
     <button id="modeToggle" class="secondary">模式：步行</button>
-    <button id="navToggle" class="secondary">導航模式：開</button>
-    <button id="nightToggle" class="secondary">夜間：關</button>
+  </div>
+  <div class="row hud-group">
     <button id="punchBtn" class="secondary">拳 (J)</button>
     <button id="kickBtn" class="secondary">腿 (K)</button>
     <button id="comboBtn" class="secondary">連招 (L)</button>
     <button id="drinkBtn" class="secondary">喝水 (T)</button>
+  </div>
+  <div class="row hud-group">
     <button id="eatBtn" class="secondary">吃飯 (E)</button>
     <button id="sitBtn" class="secondary">坐下 (E)</button>
     <button id="sleepBtn" class="secondary">睡覺 (E)</button>
@@ -276,6 +276,8 @@
       <li>🚗 <span class="label">開車</span>——走到車旁按 F（手機點「上車」）</li>
       <li>🏍️ <span class="label">騎車</span>——走到機車旁按 F（手機點「騎車」）</li>
       <li>🪑 <span class="label">坐下休息</span>——走到長椅按 E（手機點「坐下」）</li>
+      <li>🍜 <span class="label">吃飯</span>——大排檔按 E，體力 +25、跑快啲</li>
+      <li>🛏️ <span class="label">睡覺</span>——走到床邊按 E，體力回滿</li>
       <li>🥊 <span class="label">打拳</span>——J 出拳、K 出腿、L 連招</li>
     </ul>
     <div class="menu-controls">
@@ -1368,15 +1370,12 @@ function updateNavHud(dt) {
 
 function setNavMode(on) {
   navMode = on;
-  document.getElementById('navToggle').textContent = '導航模式：' + (on ? '開' : '關');
 }
-document.getElementById('navToggle').addEventListener('click', () => setNavMode(!navMode));
 
 // day / night lighting presets (textures are daytime photos, so night is a
 // dimmed mood, not true night photography)
 function setNightMode(on) {
   nightMode = on;
-  document.getElementById('nightToggle').textContent = '夜間：' + (on ? '開' : '關');
   if (on) {
     scene.background.set(0x0a0e1a);
     scene.fog.color.set(0x0a0e1a);
@@ -1397,7 +1396,6 @@ function setNightMode(on) {
   // procedural outer city: lit windows glow at night
   for (const m of outerCityWinMats) m.emissiveIntensity = on ? 1.4 : 0.15;
 }
-document.getElementById('nightToggle').addEventListener('click', () => setNightMode(!nightMode));
 document.getElementById('punchBtn').addEventListener('click', () => startAction('punch'));
 document.getElementById('kickBtn').addEventListener('click', () => startAction('kick'));
 document.getElementById('comboBtn').addEventListener('click', () => startAction('combo'));
@@ -1653,7 +1651,8 @@ if (modelParam) {
 // (see there) — never before the user picks a quality.
 
 // ---------- file picker + drag & drop ----------
-document.getElementById('pick').addEventListener('click', () => fileInput.click());
+// (the file picker button lives in the settings screen now — the HUD
+// shortcut was removed 2026-11-23 to declutter the HUD)
 fileInput.addEventListener('change', () => {
   if (fileInput.files[0]) loadFromFile(fileInput.files[0]);
   fileInput.value = '';
@@ -1667,26 +1666,23 @@ window.addEventListener('drop', (e) => {
   if (f) loadFromFile(f);
 });
 
-// reset view: shared by the HUD button and the settings screen
+// reset view: settings screen button (the HUD shortcut was removed
+// 2026-11-23 to declutter the HUD)
 function resetView() {
   if (!model) return;
   if (mode === 'walk') spawnCharacter();
   else frameModel();
 }
-document.getElementById('reset').addEventListener('click', resetView);
 
-// shadow on/off (helps diagnose fill-rate / GPU bottlenecks). One setter
-// shared by the HUD button and the settings screen, so both stay in sync.
+// shadow on/off (helps diagnose fill-rate / GPU bottlenecks). Toggled
+// from the settings screen (the HUD shortcut was removed 2026-11-23).
 let shadowsOn = !isMobile;
 function setShadows(on) {
   shadowsOn = on;
   renderer.shadowMap.enabled = shadowsOn;
   sun.castShadow = shadowsOn;
   scene.traverse((o) => { if (o.isMesh && o.material) o.material.needsUpdate = true; });
-  document.getElementById('shadowToggle').textContent = '陰影：' + (shadowsOn ? '開' : '關');
 }
-document.getElementById('shadowToggle').textContent = '陰影：' + (shadowsOn ? '開' : '關');
-document.getElementById('shadowToggle').addEventListener('click', () => setShadows(!shadowsOn));
 
 // which GPU is the browser actually using? (dual-GPU laptops often run
 // Chrome on the integrated GPU, which is the #1 cause of low FPS here)
