@@ -1597,8 +1597,8 @@ function updateSitPrompt() {
 let car = null; // { group, pos, yaw, speed }
 let carState = 'none';
 const CAR_RANGE = 3;
-const CAR_ACCEL = 8, CAR_BRAKE = 20, CAR_DRAG = 1.2;
-const CAR_MAX_SPEED = 15, CAR_MAX_FAST = 25, CAR_MAX_REVERSE = 5;
+const CAR_ACCEL = 5.6, CAR_BRAKE = 20, CAR_DRAG = 1.2;
+const CAR_MAX_SPEED = 19.5, CAR_MAX_FAST = 32.5, CAR_MAX_REVERSE = 5; // top speed +30%, accel -30% (2026-11-23 user)
 const CAR_DOOR_LOCAL = new THREE.Vector3(1.15, 0, 0.4);
 // Entering Car's root motion carries the character +1.76m forward (measured
 // headlessly, 2026-11-23), so the enter starts 1.76m BEHIND the door: the
