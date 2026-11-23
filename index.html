@@ -278,7 +278,6 @@
       <li>🏍️ <span class="label">騎車</span>——走到機車旁按 F（手機點「騎車」）</li>
       <li>🪑 <span class="label">坐下休息</span>——走到長椅按 E（手機點「坐下」）</li>
       <li>🥊 <span class="label">打拳</span>——J 出拳、K 出腿、L 連招</li>
-      <li>🏠 <span class="label">個人房間</span>——設定裡點「進入個人房間」</li>
     </ul>
     <div class="menu-controls">
       <h2>操作說明</h2>
@@ -325,8 +324,10 @@
       <button class="swatch" data-part="shorts" data-color="0xc9b18a" style="background:#c9b18a" title="卡其"></button>
     </div>
     <p class="set-soon">換裝只在本次遊戲生效（重新載入後恢復原樣）</p>
+    <div id="set-room-section">
     <p class="menu-section">個人房間</p>
     <button id="set-room" class="qc-btn">進入個人房間</button>
+    </div>
     <p class="menu-section">畫面</p>
     <button id="set-shadow" class="qc-btn set-row">光影<span class="set-val">開</span></button>
     <button id="set-night" class="qc-btn set-row">夜間<span class="set-val">關</span></button>
@@ -1088,6 +1089,155 @@ function collideCar() {
   if (hit) car.speed = 0;
 }
 
+// ---------- camera collision (buildings-aabb.json) ----------
+// The demo had no camera collision: the camera clipped through
+// buildings and walls, and the low driving camera made it worse.
+// This pulls the camera back along its sight line so it stops just
+// before the nearest building, and clamps it above the terrain.
+//
+// Data: buildings-aabb.json — the 460 audit bboxes (problems-v2.json),
+// raw glb coordinates, 2 decimals. Same frame as the audit, verified
+// against the footprint grid: 448/460 buildings overlap blocked cells
+// under scene = raw - modelCenter (the 12 exceptions are hillside
+// buildings above the grid's ground band + 2 podium towers, all
+// explained — see patch.md). At activation the boxes are transformed
+// once into scene coords (x/z minus modelCenter, y plus
+// model.position.y, the frameModel shift).
+//
+// Activation mirrors the road data: the model centre must match the
+// baked values within 2m, else the system silently disables itself
+// (different .glb via ?model=, or the JSON not deployed yet) and the
+// cameras behave exactly as they do today. The fetch is deliberately
+// separate from loadRoadData's Promise.all — a missing
+// buildings-aabb.json must not break roads or footprint collision.
+//
+// Performance: 460 slab tests per frame is ~10k flops — negligible
+// next to the render loop. No caching: the camera lerps every frame
+// while driving/riding, so a "did the camera move" check would almost
+// never skip, and stale-state bugs aren't worth saving microseconds.
+//
+// Scope: walk camera, driving chase cam, bike chase cam. NOT the room
+// camera (indoor, already clamped) or fly-mode OrbitControls.
+let camBoxes = null;      // Float32Array, scene coords, 6 numbers per box
+let camBoxesRaw = null;   // parsed JSON (raw coords) until activated
+let camBoxesTried = false;
+
+const CAM_MARGIN = 0.3;   // stop this far before a wall (m)
+const CAM_MIN_DIST = 1.0; // never closer than this to the target point (m)
+
+function tryActivateCamBoxes() {
+  if (!model || !camBoxesRaw) return;
+  // baked for one map: centre must match (2m tolerance, same as roads)
+  // — plus the Y shift, which also catches a ?model= reload
+  if (Math.abs(modelCenter.x - camBoxesRaw.modelCenter.x) > 2 ||
+      Math.abs(modelCenter.z - camBoxesRaw.modelCenter.z) > 2 ||
+      Math.abs(model.position.y + camBoxesRaw.modelMinY) > 2) {
+    camBoxes = null;
+    return;
+  }
+  // transform once, raw -> scene: x/z minus the centre, y plus the
+  // frameModel shift (model.position.y = -box.min.y)
+  const raw = camBoxesRaw.boxes;
+  const out = new Float32Array(raw.length * 6);
+  for (let i = 0; i < raw.length; i++) {
+    const b = raw[i], o = i * 6;
+    out[o] = b[0] - modelCenter.x;
+    out[o + 1] = b[1] + model.position.y;
+    out[o + 2] = b[2] - modelCenter.z;
+    out[o + 3] = b[3] - modelCenter.x;
+    out[o + 4] = b[4] + model.position.y;
+    out[o + 5] = b[5] - modelCenter.z;
+  }
+  camBoxes = out;
+}
+
+function loadCamAABBs() {
+  if (camBoxesTried) { tryActivateCamBoxes(); return; }
+  camBoxesTried = true;
+  fetch('./buildings-aabb.json')
+    .then((r) => { if (!r.ok) throw new Error('buildings-aabb.json ' + r.status); return r.json(); })
+    .then((j) => { camBoxesRaw = j; tryActivateCamBoxes(); })
+    .catch((e) => { console.warn('camera collision data not loaded, cameras unclamped:', e); });
+}
+
+// -- pure math (also exercised by test-camera.mjs; keep in sync) --
+// Slab test: earliest t in [0,1] where the segment o + t*d enters the
+// box at boxes[i..i+5] ([minX,minY,minZ,maxX,maxY,maxZ]), or Infinity
+// if it never enters. A segment starting inside the box returns 0 —
+// callers must ignore t <= 0 (the camera target is inside a building;
+// there is no "before the wall" to pull back to).
+function segmentBoxT(ox, oy, oz, dx, dy, dz, boxes, i) {
+  let tmin = 0, tmax = 1;
+  // X slab
+  if (dx === 0) {
+    if (ox < boxes[i] || ox > boxes[i + 3]) return Infinity;
+  } else {
+    let t1 = (boxes[i] - ox) / dx, t2 = (boxes[i + 3] - ox) / dx;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return Infinity;
+  }
+  // Y slab
+  if (dy === 0) {
+    if (oy < boxes[i + 1] || oy > boxes[i + 4]) return Infinity;
+  } else {
+    let t1 = (boxes[i + 1] - oy) / dy, t2 = (boxes[i + 4] - oy) / dy;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return Infinity;
+  }
+  // Z slab
+  if (dz === 0) {
+    if (oz < boxes[i + 2] || oz > boxes[i + 5]) return Infinity;
+  } else {
+    let t1 = (boxes[i + 2] - oz) / dz, t2 = (boxes[i + 5] - oz) / dz;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return Infinity;
+  }
+  return tmin;
+}
+// -- end pure math --
+
+// Pull `desired` back toward `target` so the camera stops just before
+// the nearest building on its sight line, and clamp it above the
+// terrain. Mutates `desired` in place; no-op when the data isn't
+// active (fetch failed / wrong model), leaving the cameras exactly as
+// they are today.
+function clampCameraToBuildings(target, desired) {
+  if (!camBoxes) return;
+  // (1) ground clamp first: never under the terrain. refY is the
+  // target height (the player's head), so rooftops above the player
+  // don't count as floor — the AABB test below handles buildings.
+  const gy = groundHeight(desired.x, desired.z, target.y);
+  if (desired.y < gy + 0.5) desired.y = gy + 0.5;
+  // (2) building AABBs: nearest box the sight line enters
+  const dx = desired.x - target.x;
+  const dy = desired.y - target.y;
+  const dz = desired.z - target.z;
+  const len = Math.hypot(dx, dy, dz);
+  if (len < 1e-6) return;
+  let best = Infinity;
+  for (let i = 0; i < camBoxes.length; i += 6) {
+    const t = segmentBoxT(target.x, target.y, target.z, dx, dy, dz, camBoxes, i);
+    if (t > 0 && t < best) best = t;
+  }
+  if (best === Infinity) return;
+  // stop CAM_MARGIN before the wall, but never closer than
+  // CAM_MIN_DIST to the target (backed-into-a-corner case: the wall is
+  // nearer than 1m, so the camera may still touch it — unavoidable
+  // without moving the target itself)
+  const stop = Math.max(CAM_MIN_DIST, best * len - CAM_MARGIN);
+  if (stop >= len) return;
+  const s = stop / len;
+  desired.x = target.x + dx * s;
+  desired.y = target.y + dy * s;
+  desired.z = target.z + dz * s;
+}
+
 // ---------- map boundary: fog-of-war walls + playable bounds ----------
 let bounds = null; // {minX, maxX, minZ, maxZ}, from the terrain heightfield
 let fogWalls = [];
@@ -1316,7 +1466,9 @@ function updateWalkCamera() {
     Math.sin(camPitch),
     Math.cos(camYaw) * Math.cos(camPitch)
   ).multiplyScalar(camDist);
-  camera.position.copy(target).add(off);
+  const desired = target.clone().add(off);
+  clampCameraToBuildings(target, desired);
+  camera.position.copy(desired);
   camera.lookAt(target);
 }
 
@@ -1408,7 +1560,9 @@ function onLoaded(gltf, name) {
   // (a different .glb must not inherit the old map's data), then
   // (re)activate if the model matches
   roadGrid = null; footGrid = null;
+  camBoxes = null;
   loadRoadData();
+  loadCamAABBs();
   setMode(mode); // apply the current mode to the fresh model
   // Bryce loads only after the map is done, on all devices: on mobile
   // the two big .glb parses must not spike memory at the same time
@@ -1725,6 +1879,10 @@ function syncSettingsUI() {
   document.querySelector('#set-shadow .set-val').textContent = shadowsOn ? '開' : '關';
   document.querySelector('#set-night .set-val').textContent = nightMode ? '開' : '關';
   document.querySelector('#set-nav .set-val').textContent = navMode ? '開' : '關';
+  // the room only opens in-game — hide its section when settings was
+  // opened from the main menu (pre-game)
+  const roomSection = document.getElementById('set-room-section');
+  if (roomSection) roomSection.style.display = settingsReturn === 'pause' ? '' : 'none';
   syncRoomButton();
   syncDressUpUI();
 }
@@ -1978,6 +2136,7 @@ function playOneShot(name, onDone) {
   const target = ONE_SHOT_TARGET[name] ?? ONE_SHOT_DEFAULT;
   a.timeScale = Math.max(1, bryce.clips[name].duration / target);
   bryce.oneShot = a;
+  if (ATTACK_CLIPS.has(name)) checkNpcHits(); // attack one-shot: NPC hit check (see npc-combat)
   const done = (e) => {
     if (e.action !== a) return;
     bryce.mixer.removeEventListener('finished', done);
@@ -2086,13 +2245,28 @@ function spawnNpcs() {
   if (npcs.length) return;
   const sx = SPAWN_RAW.x - modelCenter.x;
   const sz = SPAWN_RAW.z - modelCenter.z;
+  // NPC shirt/shorts colours — each NPC gets a different pair so they
+  // don't all look like Bryce (multiply tints, same as dress-up)
+  const NPC_SHIRTS = [0x4a7fb5, 0xb54a4a];
+  const NPC_SHORTS = [0x3a3a3a, 0x8a7a5a];
   for (let i = 0; i < NPC_COUNT; i++) {
     // SkeletonUtils.clone re-binds the skeleton — a plain .clone() would
     // leave the skinned meshes pointing at Bryce's bones
     const group = SkeletonUtils.clone(bryce.group);
+    group.rotation.order = 'YXZ'; // knockdown pitch (rotation.x) must tip in the NPC's local frame, not the world frame (see npc-combat)
     group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    // tint this NPC's shirt/shorts — clone the materials first (the
+    // clone shares Ch42_Body with the player; tinting in place would
+    // recolour Bryce too)
+    group.traverse((o) => {
+      if (!o.isMesh || Array.isArray(o.material)) return;
+      if (o.name === 'Ch42_Shirt' || o.name === 'Ch42_Shorts') {
+        o.material = o.material.clone();
+        o.material.color.setHex(o.name === 'Ch42_Shirt' ? NPC_SHIRTS[i % NPC_SHIRTS.length] : NPC_SHORTS[i % NPC_SHORTS.length]);
+      }
+    });
     const mixer = new THREE.AnimationMixer(group);
-    const npc = { group, mixer, action: null, state: 'idle', target: null, idleTimer: 1 + Math.random() * 3, yaw: Math.random() * Math.PI * 2 };
+    const npc = { group, mixer, action: null, state: 'idle', target: null, idleTimer: 1 + Math.random() * 3, yaw: Math.random() * Math.PI * 2, hits: 0, lastHitAt: -99, stateTimer: 0, fallT: 0, kbX: 0, kbZ: 0, kbSpeed: 0, tag: null };
     // random start inside the plaza (never on top of the spawn)
     const a = Math.random() * Math.PI * 2;
     const r = 4 + Math.random() * (NPC_WANDER_RADIUS - 4);
@@ -2102,6 +2276,7 @@ function spawnNpcs() {
     const tag = makeNameTagSprite(NPC_TAG_TEXT);
     tag.position.y = NPC_TAG_HEIGHT;
     group.add(tag);
+    npc.tag = tag; // hidden while knocked down (see npc-combat)
     scene.add(group);
     npcPlay(npc, 'Idle');
     npcs.push(npc);
@@ -2117,6 +2292,8 @@ function updateNpcs(dt) {
   for (const npc of npcs) {
     npc.mixer.update(dt);
     const p = npc.group.position;
+    npcKnockbackStep(npc, dt, sx, sz); // combat knockback (no-op when kbSpeed is 0)
+    if (npcCombatStep(npc, dt)) continue; // stunned / down / getting up — handled in npc-combat
     if (npc.state === 'idle') {
       npc.idleTimer -= dt;
       if (npc.idleTimer <= 0) {
@@ -2154,6 +2331,179 @@ function updateNpcs(dt) {
     }
     p.set(nx, groundHeight(nx, nz, p.y), nz);
   }
+}
+
+// ---------- NPC combat (v1: passersby can be hit) ----------
+// The player can hit NPCs with the martial-arts attacks (J punch / K
+// kick / L combo — clips Punching/Kicking). There is NO hit-reaction
+// clip in the 12 Mixamo clips (Idle/Walking/Running, Punching/Kicking,
+// Entering Car/Exiting Car/Driving, Sitting/Sitting Idle/Stand Up,
+// Drinking — see the loadBryce header), so all reactions are procedural:
+// knockback velocity + a rotation-based fall. No counterattack, no
+// death, no HP bar in v1.
+//
+// How it works:
+// - Hit check runs ONCE per swing, synchronously when the attack
+//   one-shot starts (hook in playOneShot — see patch.md step 1). The
+//   combo chains 3 one-shots, so it gets 3 checks, one per strike.
+//   The check reads charPos/charYaw at attack time, so walk-and-attack
+//   (moving during the swing) cannot change which NPCs a swing hits.
+// - A hit NPC is knocked back (decaying velocity) and stunned ~1s
+//   (stops wandering, plays Idle). Hits within NPC_COMBO_WINDOW chain:
+//   the 3rd hit in a row knocks the NPC DOWN — the group tips
+//   backwards onto the ground (rotation.x, eased), lies ~3s, gets up,
+//   resumes wandering. Getting up resets the combo count. Downed NPCs
+//   can't be hit again until they're back on their feet.
+// - The fall tips in the NPC's LOCAL frame: spawnNpcs sets the group's
+//   rotation order to YXZ (patch.md step 3) — with the default XYZ
+//   order rotation.x would pitch about the WORLD X axis and every NPC
+//   would fall toward world -Z regardless of facing. The NPC turns to
+//   face the player at knockdown, so "backwards" is away from the player.
+// - Walk-and-attack (走A): attack one-shots do NOT lock movement (see
+//   isAttackOneShot + the updateWalk lock in patch.md step 5). Other
+//   one-shots (car enter/exit, sit/stand, drinking, sleep) still lock
+//   it. v1 limitation: the attack clip replaces the walk clip, so
+//   Bryce glides (moves without leg animation) for the 1-1.5s of the
+//   sped-up attack — layered upper/lower-body animation is future work.
+const ATTACK_CLIPS = new Set(['Punching', 'Kicking']); // attack one-shots: hit check + no movement lock
+const NPC_HIT_RANGE = 2.0; // metres — punch/kick reach
+const NPC_HIT_DOT = 0.5; // cos(60°): the NPC must be within ~60° of the player's facing
+const NPC_STUN_TIME = 1.0; // seconds the NPC stands stunned after a hit
+const NPC_DOWN_TIME = 3.0; // seconds lying on the ground after a knockdown (after the fall completes)
+const NPC_FALL_TIME = 0.4; // seconds to tip over
+const NPC_RISE_TIME = 0.5; // seconds to get back up
+const NPC_COMBO_WINDOW = 3.0; // seconds — hits closer together than this chain into a combo
+const NPC_KNOCKDOWN_HITS = 3; // hits in a row to knock the NPC down
+const NPC_KNOCKBACK_SPEED = 6; // m/s initial knockback velocity (stun)
+const NPC_KNOCKDOWN_KB = 10; // m/s initial knockback velocity (knockdown — stronger push)
+const NPC_KB_DECAY = 6; // 1/s — knockback velocity decay (travel distance ≈ speed / decay)
+
+function isAttackOneShot() {
+  // true while an ATTACK one-shot is playing — used by updateWalk's
+  // movement lock (attacks don't root the player) and only there.
+  // bryce.oneShot is the running AnimationAction; getClip() is the
+  // three.js accessor for its clip.
+  return !!(bryce && bryce.oneShot && ATTACK_CLIPS.has(bryce.oneShot.getClip().name));
+}
+
+function checkNpcHits() {
+  // One hit check per swing, at swing start (called from playOneShot
+  // when a Punching/Kicking one-shot starts). Synchronous, so it reads
+  // the player's position/facing AT ATTACK TIME — the player may keep
+  // moving during the swing (walk-and-attack) without affecting which
+  // NPCs this swing hits. Cheap: runs only on attack, never per frame.
+  if (!npcs.length) return;
+  const fx = Math.sin(charYaw), fz = Math.cos(charYaw); // player forward (same convention as the pet follow)
+  for (const npc of npcs) {
+    if (npc.state === 'down' || npc.state === 'gettingup') continue; // already down — can't be hit again
+    const p = npc.group.position;
+    const dx = p.x - charPos.x, dz = p.z - charPos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > NPC_HIT_RANGE) continue;
+    // roughly in front of the player (dist ~ 0 means on top of the
+    // player — counts as in front)
+    const dot = dist > 0.01 ? (dx * fx + dz * fz) / dist : 1;
+    if (dot < NPC_HIT_DOT) continue;
+    npcTakeHit(npc, dx, dz, dist);
+  }
+}
+
+function npcTakeHit(npc, dx, dz, dist) {
+  const now = clock.elapsedTime;
+  // combo: hits within NPC_COMBO_WINDOW of each other chain; a longer
+  // gap resets the count before this hit lands
+  if (now - npc.lastHitAt > NPC_COMBO_WINDOW) npc.hits = 0;
+  npc.hits++;
+  npc.lastHitAt = now;
+  // knockback direction: away from the player (integrated + decayed
+  // by npcKnockbackStep in updateNpcs)
+  const inv = 1 / (dist || 1);
+  npc.kbX = dx * inv;
+  npc.kbZ = dz * inv;
+  if (npc.hits >= NPC_KNOCKDOWN_HITS) {
+    // 3rd hit in a row: knocked down. Face the player first so the
+    // backward fall lands away from the player.
+    npc.yaw = Math.atan2(-dx, -dz);
+    npc.group.rotation.y = npc.yaw;
+    npc.state = 'down';
+    npc.fallT = 0;
+    npc.stateTimer = NPC_DOWN_TIME;
+    npc.kbSpeed = NPC_KNOCKDOWN_KB;
+    npcPlay(npc, 'Idle');
+    if (npc.tag) npc.tag.visible = false; // the tag would lie on the ground behind the head
+  } else {
+    npc.state = 'stunned';
+    npc.stateTimer = NPC_STUN_TIME;
+    npc.kbSpeed = NPC_KNOCKBACK_SPEED;
+    npcPlay(npc, 'Idle');
+  }
+}
+
+function npcKnockbackStep(npc, dt, sx, sz) {
+  // Integrate + decay the knockback velocity. Called for every NPC
+  // every frame from updateNpcs; a no-op when kbSpeed is 0 (the normal
+  // case), so the per-frame cost is one comparison. The slide is
+  // clamped to the wander circle, same as the walk branch.
+  if (npc.kbSpeed <= 0.05) { npc.kbSpeed = 0; return; }
+  const p = npc.group.position;
+  const step = npc.kbSpeed * dt;
+  let nx = p.x + npc.kbX * step;
+  let nz = p.z + npc.kbZ * step;
+  const ox = nx - sx, oz = nz - sz;
+  const od = Math.hypot(ox, oz);
+  if (od > NPC_WANDER_RADIUS) {
+    nx = sx + ox / od * NPC_WANDER_RADIUS;
+    nz = sz + oz / od * NPC_WANDER_RADIUS;
+  }
+  p.set(nx, groundHeight(nx, nz, p.y), nz);
+  npc.kbSpeed *= Math.exp(-NPC_KB_DECAY * dt);
+}
+
+function npcCombatStep(npc, dt) {
+  // Combat states: 'stunned' / 'down' / 'gettingup'. Returns true when
+  // the NPC is in a combat state — the caller (updateNpcs) must
+  // `continue` and skip the idle/walk branches. Returns false for
+  // 'idle'/'walk' (handled by the existing branches).
+  if (npc.state === 'stunned') {
+    npc.stateTimer -= dt;
+    if (npc.stateTimer <= 0) {
+      npc.state = 'idle';
+      npc.idleTimer = 1; // brief pause, then wander again
+      npcPlay(npc, 'Idle');
+    }
+    return true;
+  }
+  if (npc.state === 'down') {
+    if (npc.fallT < 1) {
+      // falling: tip backwards onto the ground (smoothstep eased).
+      // rotation.x is negative = head toward local -Z = on the back.
+      npc.fallT = Math.min(1, npc.fallT + dt / NPC_FALL_TIME);
+      const t = npc.fallT * npc.fallT * (3 - 2 * npc.fallT);
+      npc.group.rotation.x = -Math.PI / 2 * t;
+    } else {
+      npc.stateTimer -= dt;
+      if (npc.stateTimer <= 0) {
+        npc.state = 'gettingup';
+        npc.fallT = 0;
+      }
+    }
+    return true;
+  }
+  if (npc.state === 'gettingup') {
+    npc.fallT = Math.min(1, npc.fallT + dt / NPC_RISE_TIME);
+    const t = npc.fallT * npc.fallT * (3 - 2 * npc.fallT);
+    npc.group.rotation.x = -Math.PI / 2 * (1 - t);
+    if (npc.fallT >= 1) {
+      npc.group.rotation.x = 0;
+      npc.hits = 0; // getting up resets the combo count
+      npc.state = 'idle';
+      npc.idleTimer = 1;
+      if (npc.tag) npc.tag.visible = true;
+      npcPlay(npc, 'Idle');
+    }
+    return true;
+  }
+  return false;
 }
 
 // ---------- pet dog (v1: procedural geometric dog, follows the player) ----------
@@ -3126,6 +3476,7 @@ function updateDrive(dt) {
     Math.cos(camYaw) * Math.cos(drivePitch)
   ).multiplyScalar(camDist);
   const desired = target.clone().add(off);
+  clampCameraToBuildings(target, desired);
   camera.position.lerp(desired, Math.min(1, dt * 5));
   camera.lookAt(target);
 }
@@ -3395,6 +3746,7 @@ function updateRide(dt) {
   // chase camera: behind the bike at the walk-mode distance (wheel works)
   const target = new THREE.Vector3(bike.pos.x, bike.pos.y + 2.2, bike.pos.z);
   const desired = target.clone().addScaledVector(fwd, -camDist).add(new THREE.Vector3(0, 2.5, 0));
+  clampCameraToBuildings(target, desired);
   camera.position.lerp(desired, Math.min(1, dt * 5));
   camera.lookAt(target);
 }
@@ -3651,11 +4003,16 @@ function updateWalk(dt) {
     move.addScaledVector(right, joy.x);
   }
   moving = move.lengthSq() > 0;
-  // martial arts: plant the feet while a move is playing; same while
-  // sitting down / seated / standing up, and while getting in/out of
-  // the car (the one-shot's root motion does the moving, not the keys)
+  // movement lock: the procedural fallback plants its feet while a move
+  // plays, and non-attack one-shots (car enter/exit, sit/stand, drinking,
+  // sleep transitions) lock movement too — the one-shot's root motion
+  // does the moving, not the keys. ATTACK one-shots (Punching/Kicking)
+  // do NOT lock movement: Bryce can walk while attacking (走A). v1
+  // limitation: the attack clip replaces the walk clip, so he glides
+  // (moves without leg animation) for the 1-1.5s of the attack;
+  // layered upper/lower-body animation is a future improvement.
   const pose = actionPose(clock.elapsedTime);
-  if (pose || (bryce && bryce.oneShot) || sitState !== 'stand' || carState !== 'none' || sleepState !== 'awake' || bikeState !== 'none') { move.set(0, 0, 0); moving = false; }
+  if (pose || (bryce && bryce.oneShot && !isAttackOneShot()) || sitState !== 'stand' || carState !== 'none' || sleepState !== 'awake' || bikeState !== 'none') { move.set(0, 0, 0); moving = false; }
   const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
   const wantFly = keys['Space'] || touchFlyUp;
   const wantDown = keys['ControlLeft'] || keys['ControlRight'] || touchFlyDown;
