@@ -35,6 +35,24 @@
     background: rgba(37, 99, 235, 0.25); border: 3px dashed #60a5fa; border-radius: 16px;
     color: #fff; font-size: 22px; font-weight: 700; pointer-events: none;
   }
+  #quality-choice {
+    position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+    background: rgba(8, 12, 22, 0.94); backdrop-filter: blur(4px);
+  }
+  #quality-choice .panel { width: min(420px, 92vw); text-align: center; }
+  #quality-choice h1 { color: #e8eef7; font-size: 30px; margin: 0 0 6px; font-weight: 700; }
+  #quality-choice .sub { color: #b9c6da; font-size: 13px; margin: 0 0 24px; }
+  .qc-btn {
+    display: block; width: 100%; margin: 0 0 12px; padding: 16px 18px; text-align: left;
+    font-size: 17px; font-weight: 700; border-radius: 12px;
+  }
+  .qc-btn .qc-tag {
+    display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px;
+    background: #22c55e; color: #fff; font-size: 12px; font-weight: 700; vertical-align: middle;
+  }
+  .qc-btn .qc-desc { display: block; margin-top: 5px; font-size: 13px; font-weight: 400; color: #cbd5e1; }
+  .qc-btn .qc-warn { display: block; margin-top: 5px; font-size: 12px; font-weight: 400; color: #fca5a5; }
+  #quality-choice .note { color: #94a3b8; font-size: 12px; margin: 16px 0 0; }
   #toast {
     position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%) translateY(8px); z-index: 11;
     color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
@@ -115,13 +133,14 @@
     <button id="punchBtn" class="secondary">拳 (J)</button>
     <button id="kickBtn" class="secondary">腿 (K)</button>
     <button id="comboBtn" class="secondary">連招 (L)</button>
+    <button id="drinkBtn" class="secondary">喝水 (T)</button>
     <button id="sitBtn" class="secondary">坐下 (E)</button>
     <button id="carBtn" class="secondary">上車 (F)</button>
   </div>
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
 
-<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下 · F 上車</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降</span></div>
+<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下 · F 上車 · T 喝水</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車：搖桿上推加速、左右轉向</span></div>
 <div id="toast"></div>
 <div id="sit-prompt"></div>
 <div id="car-prompt"></div>
@@ -139,6 +158,20 @@
   </div>
 </div>
 <div id="drop-hint">放開以載入 .glb</div>
+<div id="quality-choice">
+  <div class="panel">
+    <h1>Project GO</h1>
+    <p class="sub">尖沙咀 3D · 選擇畫質</p>
+    <button id="qc-lite" class="qc-btn">輕量 Lite<span class="qc-tag">建議</span>
+      <span class="qc-desc">37MB · 載入快、省記憶體</span>
+    </button>
+    <button id="qc-full" class="qc-btn secondary">高畫質 Full
+      <span class="qc-desc">66MB · 畫質最好</span>
+      <span class="qc-warn">需要高效能電腦，手機／低階裝置不要選</span>
+    </button>
+    <p class="note">選擇後開始載入地圖</p>
+  </div>
+</div>
 
 <script type="importmap">
 {
@@ -166,9 +199,10 @@ const dropHint = document.getElementById('drop-hint');
 
 // ---------- renderer / scene ----------
 // Mobile (touch / narrow screen) gets the lite treatment: no antialias,
-// pixel ratio 1, shadows off by default, and the lite map (see entry
-// below). The full map's textures need ~1.9GB of GPU memory, which
-// kills phone browsers; the lite map (256²) needs ~360MB.
+// pixel ratio 1, shadows off by default, and no mipmaps (see onLoaded).
+// The full map's textures need ~1.9GB of GPU memory, which kills phone
+// browsers; the lite map (256²) needs ~360MB. Map quality itself is the
+// player's choice up front (see the entry block below).
 const isMobile = matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
 const renderer = new THREE.WebGLRenderer({ antialias: !isMobile });
 renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 1.5));
@@ -867,6 +901,7 @@ document.getElementById('nightToggle').addEventListener('click', () => setNightM
 document.getElementById('punchBtn').addEventListener('click', () => startAction('punch'));
 document.getElementById('kickBtn').addEventListener('click', () => startAction('kick'));
 document.getElementById('comboBtn').addEventListener('click', () => startAction('combo'));
+document.getElementById('drinkBtn').addEventListener('click', () => drinkWater());
 document.getElementById('sitBtn').addEventListener('click', () => toggleSit());
 document.getElementById('carBtn').addEventListener('click', () => toggleCar());
 
@@ -985,7 +1020,10 @@ function onLoaded(gltf, name) {
   setMode(mode); // apply the current mode to the fresh model
   // Mobile: Bryce loads only after the map is done, so the two big
   // .glb parses don't spike memory at the same time (iOS kills the tab).
-  if (isMobile && !bryce.group) loadBryce();
+  // NOTE: check `bryce` itself, not `bryce.group` — bryce is still null
+  // here on mobile (that's the whole point of deferring), and reading
+  // .group off null throws "null is not an object" on iPhone Safari.
+  if (isMobile && !bryce) loadBryce();
 }
 
 function onError(err) {
@@ -1003,6 +1041,10 @@ function loadFromUrl(url, name) {
 }
 
 function loadFromFile(file) {
+  // a file dropped before picking a quality: don't leave the map
+  // loading behind the choice overlay
+  const qc = document.getElementById('quality-choice');
+  if (qc) qc.style.display = 'none';
   setStatus('讀取檔案：' + file.name);
   showProgress(0.5);
   const reader = new FileReader();
@@ -1015,19 +1057,14 @@ function loadFromFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
-// ---------- entry: ?model= URL, else default .glb, else picker ----------
-// Mobile loads the ultra-lite map (128² textures) when it exists in the
-// repo, then lite (256²), then full. The 256² lite map alone still
-// exceeds the iOS tab memory limit (textures ~490MB + geometry ~150MB
-// + Bryce + decode peaks), so the phone needs the 128² version.
+// ---------- entry: ?model= URL, else quality choice, else picker ----------
+// Full (512² textures, ~1.9GB GPU memory) is too heavy for most devices,
+// not just phones, so the player picks Lite or Full up front; Lite is the
+// recommended default. Lite tries the ultra-lite map (128²) first when
+// it exists in the repo, then lite (256²), then full.
 const params = new URLSearchParams(location.search);
 const modelParam = params.get('model');
-if (modelParam) {
-  loadFromUrl(modelParam, modelParam.split('/').pop());
-} else {
-  const candidates = isMobile
-    ? ['./full_tst_tile_ulite.glb', './full_tst_tile_lite.glb', './full_tst_tile.glb']
-    : ['./full_tst_tile.glb'];
+function tryCandidates(candidates) {
   (function tryNext(i) {
     if (i >= candidates.length) { setStatus('尚未載入模型，請選擇 full_tst_tile.glb'); return; }
     fetch(candidates[i], { method: 'HEAD' }).then((r) => {
@@ -1035,6 +1072,21 @@ if (modelParam) {
       else tryNext(i + 1);
     }).catch(() => tryNext(i + 1));
   })(0);
+}
+const choiceEl = document.getElementById('quality-choice');
+if (modelParam) {
+  choiceEl.style.display = 'none';
+  loadFromUrl(modelParam, modelParam.split('/').pop());
+} else {
+  setStatus('請選擇畫質：Lite 或 Full');
+  document.getElementById('qc-lite').addEventListener('click', () => {
+    choiceEl.style.display = 'none';
+    tryCandidates(['./full_tst_tile_ulite.glb', './full_tst_tile_lite.glb', './full_tst_tile.glb']);
+  });
+  document.getElementById('qc-full').addEventListener('click', () => {
+    choiceEl.style.display = 'none';
+    tryCandidates(['./full_tst_tile.glb']);
+  });
 }
 
 // rigged character: desktop loads it in parallel with the map; mobile
@@ -1172,6 +1224,7 @@ window.addEventListener('keydown', (e) => {
     else if (e.code === 'KeyL') startAction('combo');
     else if (e.code === 'KeyE') toggleSit();
     else if (e.code === 'KeyF') toggleCar();
+    else if (e.code === 'KeyT') drinkWater();
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -1285,9 +1338,8 @@ function actionPose(now) {
 // Replaces the procedural character once loaded; the procedural one
 // stays as a fallback if the file is missing (e.g. before it is pushed
 // to the repo). Clips: Idle/Walking/Running (locomotion), Punching/
-// Kicking (martial arts). Entering Car/Exiting Car/Driving/Sitting/
-// Sitting Idle/Stand Up/Drinking are loaded too, wired in later phases
-// (no car or chairs exist yet).
+// Kicking (martial arts, J/K/L), Entering Car/Exiting Car/Driving
+// (car, F), Sitting/Sitting Idle/Stand Up (bench, E), Drinking (T).
 let bryce = null; // { group, mixer, clips, loco, oneShot, current }
 function loadBryce() {
   loader.load('./bryce_animated.glb', (g) => {
@@ -1339,6 +1391,17 @@ function playOneShot(name, onDone) {
   };
   bryce.mixer.addEventListener('finished', done);
   return true;
+}
+
+function drinkWater() {
+  // T key / button: play the Drinking clip once (Bryce only). Movement
+  // locks while it plays — updateWalk zeroes move while bryce.oneShot
+  // is set, same as the martial-arts one-shots.
+  if (!bryce || !bryce.clips['Drinking']) return;
+  if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return; // not while sitting down
+  if (carState !== 'none') return; // not while in the car
+  playOneShot('Drinking');
 }
 
 // ---------- bench + sitting (Mixamo Sitting / Sitting Idle / Stand Up) ----------
@@ -1395,6 +1458,26 @@ function createBench() {
     sitPos: new THREE.Vector3(bx, by, bz + 0.35),
     yaw: 0
   };
+}
+
+// Bench collision: keep the walker out of the bench's footprint.
+// The rect is the seat (1.8m wide, z -0.31..+0.26 with the backrest)
+// expanded by the character's radius (0.4m) — except the front
+// (south) side, which stays tight at the seat's front edge so the
+// sit spot (z +0.35) remains outside the collision: sitting down
+// must not fight the push-out. Skipped while sitting (the sitter is
+// meant to be at the seat) and while flying above the bench.
+function collideBench() {
+  if (!bench || sitState !== 'stand') return;
+  if (charPos.y > bench.pos.y + 1.2) return; // flying over it
+  const hw = 0.9 + 0.4, zMin = -0.31 - 0.4, zMax = 0.30;
+  const lx = charPos.x - bench.pos.x, lz = charPos.z - bench.pos.z;
+  if (Math.abs(lx) > hw || lz < zMin || lz > zMax) return; // outside
+  // push out along the nearest edge (v1: no sliding, just block)
+  const dx = hw - Math.abs(lx), dn = lz - zMin, ds = zMax - lz;
+  if (dx <= dn && dx <= ds) charPos.x = bench.pos.x + Math.sign(lx || 1) * hw;
+  else if (dn <= ds) charPos.z = bench.pos.z + zMin;
+  else charPos.z = bench.pos.z + zMax;
 }
 
 function toggleSit() {
@@ -1605,21 +1688,30 @@ function updateCarPrompt() {
 }
 
 function updateDrive(dt) {
-  // arcade driving: W/S throttle + brake/reverse, A/D steering,
-  // Shift for the faster top speed. No collision in v1.
+  // arcade driving: W/S (or the touch joystick) throttle + brake/
+  // reverse, A/D (or joystick left/right) steering, Shift for the
+  // faster top speed. No collision in v1.
   const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
   const maxSpeed = running ? CAR_MAX_FAST : CAR_MAX_SPEED;
-  if (keys['KeyW']) car.speed += CAR_ACCEL * dt;
-  else if (keys['KeyS']) {
+  // throttle: keyboard wins if held, else the touch joystick (push
+  // up = accelerate, push down = brake/reverse, analog like walking)
+  let throttle = 0;
+  if (keys['KeyW']) throttle = 1;
+  else if (keys['KeyS']) throttle = -1;
+  else if (joy.active) throttle = -joy.y;
+  if (throttle > 0) car.speed += CAR_ACCEL * throttle * dt;
+  else if (throttle < 0) {
     // brake hard while moving forward, reverse once stopped
-    car.speed -= (car.speed > 0.5 ? CAR_BRAKE : CAR_ACCEL * 0.6) * dt;
+    car.speed -= (car.speed > 0.5 ? CAR_BRAKE : CAR_ACCEL * 0.6) * -throttle * dt;
   } else {
     // coast down: rolling drag + air drag (never overshoots past 0)
     car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), (0.5 + Math.abs(car.speed) * CAR_DRAG) * dt);
   }
   car.speed = THREE.MathUtils.clamp(car.speed, -CAR_MAX_REVERSE, maxSpeed);
-  // steering: needs motion (no turning at a standstill), reversed in reverse
-  const steer = (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0);
+  // steering: needs motion (no turning at a standstill), reversed in reverse.
+  // Joystick: push right (joy.x > 0) turns right (yaw decreases toward -X).
+  const steer = THREE.MathUtils.clamp(
+    (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0) - (joy.active ? joy.x : 0), -1, 1);
   const grip = Math.min(1, Math.abs(car.speed) / 4);
   car.yaw += steer * 1.1 * grip * Math.sign(car.speed) * dt;
   const fwd = new THREE.Vector3(Math.sin(car.yaw), 0, Math.cos(car.yaw));
@@ -1748,6 +1840,8 @@ function updateWalk(dt) {
   }
   // stay inside the map; hitting the edge shows the fog-of-war message
   clampToBounds();
+  // don't walk through the bench (push-out, see collideBench)
+  collideBench();
   // vertical + ground
   if (flying) {
     charPos.y += vy * dt;
