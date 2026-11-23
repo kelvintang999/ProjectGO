@@ -335,6 +335,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const app = document.getElementById('app');
 const metaEl = document.getElementById('meta');
@@ -1827,6 +1828,7 @@ function loadBryce() {
     scene.add(group);
     charGroup.visible = false; // procedural character stands down
     playLoco('Idle');
+    spawnNpcs();
     console.log('Bryce loaded, clips:', Object.keys(clips).join(', '));
   }, undefined, () => {
     console.warn('bryce_animated.glb not found, using procedural character');
@@ -1877,6 +1879,161 @@ function drinkWater() {
   if (sitState !== 'stand') return; // not while sitting down
   if (carState !== 'none') return; // not while in the car
   playOneShot('Drinking');
+}
+
+// ---------- NPCs (v1 prototype: 2 waypoint wanderers, Bryce clones) ----------
+// No new assets: each NPC is a SkeletonUtils.clone of the loaded Bryce
+// (shared geometry/materials/textures — no extra GPU texture memory),
+// with its own AnimationMixer playing the same Idle/Walking clip
+// objects. NPCs wander the pier plaza around the spawn (radius 20m),
+// idle 3-8s at each waypoint, then walk to the next. Spawned once,
+// right after Bryce loads; if Bryce fails to load, no NPCs appear.
+// The Walking clip is In Place (no root motion), so the group is moved
+// by code and the clip only animates the limbs.
+// v1 limits: no collision with the player or with buildings/props,
+// no interaction yet (talk/shop comes later), all NPCs look like Bryce.
+const NPC_COUNT = 2;
+const NPC_WANDER_RADIUS = 20; // metres around the spawn, pier plaza
+const NPC_WALK_SPEED = 1.4; // m/s, a stroll (the player walks 6 m/s)
+const NPC_IDLE_MIN = 3, NPC_IDLE_MAX = 8; // seconds idling per waypoint
+const NPC_ARRIVE_DIST = 0.5; // close enough to count as arrived
+const NPC_TAG_TEXT = '路人'; // generic label — never a personal name
+const NPC_TAG_HEIGHT = 2.2; // sprite floats this high above the feet
+const NPC_TAG_SCALE_X = 2, NPC_TAG_SCALE_Y = 0.5;
+
+let npcs = []; // { group, mixer, action, state, target, idleTimer, yaw }
+let npcTagMat = null; // shared by all name tags (same text, one texture)
+
+function makeNameTagSprite(text) {
+  // canvas label, same recipe as the food-stall sign (256x64, SRGB);
+  // the material is built once and shared — every v1 NPC shows 路人
+  if (!npcTagMat) {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+    const ctx = c.getContext('2d');
+    // dark pill background (manual rounded rect — no ctx.roundRect
+    // dependency, so older phone browsers are safe)
+    const x = 4, y = 8, w = 248, h = 48, r = 12;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 36px "PingFang TC", "Microsoft JhengHei", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, 128, 34);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    npcTagMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  }
+  const sprite = new THREE.Sprite(npcTagMat);
+  sprite.scale.set(NPC_TAG_SCALE_X, NPC_TAG_SCALE_Y, 1);
+  return sprite;
+}
+
+function npcPlay(npc, name) {
+  // per-NPC version of bryceFadeTo/playLoco: the same T-pose trap
+  // applies — an action faded to weight 0 is deactivated and play()
+  // alone cannot revive it, so reset() a non-running action first
+  const clip = bryce.clips[name];
+  if (!clip) return;
+  const next = npc.mixer.clipAction(clip);
+  next.setLoop(THREE.LoopRepeat);
+  if (npc.action === next) return;
+  if (!next.isRunning()) next.reset();
+  if (npc.action) npc.action.crossFadeTo(next, 0.25, false);
+  next.play();
+  npc.action = next;
+}
+
+function npcPickWaypoint(npc) {
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const a = Math.random() * Math.PI * 2;
+  const r = Math.random() * NPC_WANDER_RADIUS;
+  npc.target = { x: sx + Math.cos(a) * r, z: sz + Math.sin(a) * r };
+}
+
+function spawnNpcs() {
+  // called once from loadBryce's success callback — never before Bryce
+  // exists, never twice (a second map load reuses the same bryce object,
+  // so loadBryce does not run again)
+  if (!bryce || !bryce.clips['Idle'] || !bryce.clips['Walking']) return;
+  if (npcs.length) return;
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  for (let i = 0; i < NPC_COUNT; i++) {
+    // SkeletonUtils.clone re-binds the skeleton — a plain .clone() would
+    // leave the skinned meshes pointing at Bryce's bones
+    const group = SkeletonUtils.clone(bryce.group);
+    group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    const mixer = new THREE.AnimationMixer(group);
+    const npc = { group, mixer, action: null, state: 'idle', target: null, idleTimer: 1 + Math.random() * 3, yaw: Math.random() * Math.PI * 2 };
+    // random start inside the plaza (never on top of the spawn)
+    const a = Math.random() * Math.PI * 2;
+    const r = 4 + Math.random() * (NPC_WANDER_RADIUS - 4);
+    const x = sx + Math.cos(a) * r, z = sz + Math.sin(a) * r;
+    group.position.set(x, groundHeight(x, z, 50), z);
+    group.rotation.y = npc.yaw;
+    const tag = makeNameTagSprite(NPC_TAG_TEXT);
+    tag.position.y = NPC_TAG_HEIGHT;
+    group.add(tag);
+    scene.add(group);
+    npcPlay(npc, 'Idle');
+    npcs.push(npc);
+  }
+  console.log('NPCs spawned:', npcs.length);
+}
+
+function updateNpcs(dt) {
+  // called every frame from animate(), right after bryce.mixer.update
+  if (!npcs.length) return;
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  for (const npc of npcs) {
+    npc.mixer.update(dt);
+    const p = npc.group.position;
+    if (npc.state === 'idle') {
+      npc.idleTimer -= dt;
+      if (npc.idleTimer <= 0) {
+        npcPickWaypoint(npc);
+        npc.state = 'walk';
+        npcPlay(npc, 'Walking');
+      }
+      continue;
+    }
+    const dx = npc.target.x - p.x, dz = npc.target.z - p.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < NPC_ARRIVE_DIST) {
+      npc.state = 'idle';
+      npc.idleTimer = NPC_IDLE_MIN + Math.random() * (NPC_IDLE_MAX - NPC_IDLE_MIN);
+      npcPlay(npc, 'Idle');
+      continue;
+    }
+    // face the movement direction (smooth turn, same shortest-arc
+    // pattern as updateWalk's charYaw lerp)
+    const targetYaw = Math.atan2(dx, dz);
+    let d = targetYaw - npc.yaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    npc.yaw += d * Math.min(1, dt * 6);
+    npc.group.rotation.y = npc.yaw;
+    // step toward the target, staying inside the plaza circle
+    const step = Math.min(NPC_WALK_SPEED * dt, dist);
+    let nx = p.x + (dx / dist) * step;
+    let nz = p.z + (dz / dist) * step;
+    const ox = nx - sx, oz = nz - sz;
+    const od = Math.hypot(ox, oz);
+    if (od > NPC_WANDER_RADIUS) {
+      nx = sx + ox / od * NPC_WANDER_RADIUS;
+      nz = sz + oz / od * NPC_WANDER_RADIUS;
+    }
+    p.set(nx, groundHeight(nx, nz, p.y), nz);
+  }
 }
 
 // ---------- bench + sitting (Mixamo Sitting / Sitting Idle / Stand Up) ----------
@@ -2886,6 +3043,7 @@ function animate() {
   else controls.update();
   updateFerry(dt, clock.elapsedTime);
   if (bryce && bryce.mixer) bryce.mixer.update(dt);
+  updateNpcs(dt);
   updateSitPrompt();
   updateCarPrompt();
   updateEatPrompt();
