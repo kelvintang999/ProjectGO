@@ -1942,9 +1942,13 @@ document.getElementById('set-pick').addEventListener('click', () => fileInput.cl
 // In-memory only: no persistence — a page reload restores the original
 // look (noted in the settings screen itself).
 
-// flat-colour tints (map dropped on first tint — see tintBryceMesh)
-let shirtTint = 0xffffff;
-let shortsTint = 0xffffff;
+// null = no tint picked yet: Bryce keeps his original textured look
+// (red shirt, blue jeans). A tint only applies after the user picks a
+// swatch — previously these defaulted to 0xffffff and loadBryce's
+// re-apply call tinted Bryce flat white on every load (VM check
+// 2026-11-23: Bryce spawned white/grey instead of red/blue).
+let shirtTint = null;
+let shortsTint = null;
 
 function tintBryceMesh(nodeName, hex) {
   if (!bryce) return false;
@@ -1966,8 +1970,8 @@ function tintBryceMesh(nodeName, hex) {
 
 function applyDressUp() {
   if (!bryce) return;
-  tintBryceMesh('Ch42_Shirt', shirtTint);
-  tintBryceMesh('Ch42_Shorts', shortsTint);
+  if (shirtTint !== null) tintBryceMesh('Ch42_Shirt', shirtTint);
+  if (shortsTint !== null) tintBryceMesh('Ch42_Shorts', shortsTint);
 }
 
 function syncDressUpUI() {
