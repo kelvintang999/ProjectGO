@@ -48,6 +48,12 @@
     border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
     display: none; pointer-events: none;
   }
+  #car-prompt {
+    position: fixed; bottom: 156px; left: 50%; transform: translateX(-50%); z-index: 11;
+    color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
+    display: none; pointer-events: none;
+  }
   #nav-hud {
     position: fixed; top: 12px; right: 12px; z-index: 10; text-align: right;
     color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.8); pointer-events: none;
@@ -85,6 +91,7 @@
     #help { bottom: 210px; white-space: normal; max-width: 92vw; text-align: center; }
     #toast { bottom: 160px; }
     #sit-prompt { bottom: 260px; }
+    #car-prompt { bottom: 310px; }
   }
   #err { color: #fca5a5; }
 </style>
@@ -109,13 +116,15 @@
     <button id="kickBtn" class="secondary">腿 (K)</button>
     <button id="comboBtn" class="secondary">連招 (L)</button>
     <button id="sitBtn" class="secondary">坐下 (E)</button>
+    <button id="carBtn" class="secondary">上車 (F)</button>
   </div>
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
 
-<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降</span></div>
+<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下 · F 上車</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降</span></div>
 <div id="toast"></div>
 <div id="sit-prompt"></div>
+<div id="car-prompt"></div>
 <div id="nav-hud">
   <div id="nav-speed">0</div>
   <div id="nav-unit">km/h</div>
@@ -859,10 +868,13 @@ document.getElementById('punchBtn').addEventListener('click', () => startAction(
 document.getElementById('kickBtn').addEventListener('click', () => startAction('kick'));
 document.getElementById('comboBtn').addEventListener('click', () => startAction('combo'));
 document.getElementById('sitBtn').addEventListener('click', () => toggleSit());
+document.getElementById('carBtn').addEventListener('click', () => toggleCar());
 
 function spawnCharacter() {
   // teleporting while seated would leave the character sitting in mid-air
   if (sitState !== 'stand') cancelSit();
+  // same while driving: drop out of the car first
+  if (carState !== 'none') cancelCar();
   const sx = SPAWN_RAW.x - modelCenter.x;
   const sz = SPAWN_RAW.z - modelCenter.z;
   charPos.set(sx, 0, sz);
@@ -913,6 +925,9 @@ function setMode(m) {
   // switching modes while seated: stand back up first (the bench is a
   // walk-mode thing; flying off while seated would freeze the pose)
   if (sitState !== 'stand') cancelSit();
+  // same while driving: get out of the car first (no exit animation —
+  // just snap back to the ground so the mode switch can't get stuck)
+  if (carState !== 'none') cancelCar();
   mode = m;
   document.getElementById('modeToggle').textContent = '模式：' + (mode === 'walk' ? '步行' : '飛行');
   controls.enabled = (mode === 'fly');
@@ -965,6 +980,8 @@ function onLoaded(gltf, name) {
   createFerry();
   spawnCharacter();
   createBench();
+  createCar();
+  createPierDeck();
   setMode(mode); // apply the current mode to the fresh model
   // Mobile: Bryce loads only after the map is done, so the two big
   // .glb parses don't spike memory at the same time (iOS kills the tab).
@@ -1154,6 +1171,7 @@ window.addEventListener('keydown', (e) => {
     else if (e.code === 'KeyK') startAction('kick');
     else if (e.code === 'KeyL') startAction('combo');
     else if (e.code === 'KeyE') toggleSit();
+    else if (e.code === 'KeyF') toggleCar();
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -1225,6 +1243,7 @@ let action = null; // { name, t0 }
 function startAction(name) {
   if (mode !== 'walk' || flying) return;
   if (sitState !== 'stand') return; // no martial arts while sitting down
+  if (carState !== 'none') return; // no martial arts while in the car
   // rigged character: play the Mixamo clip instead of the procedural pose
   if (bryce) {
     if (name === 'punch') playOneShot('Punching');
@@ -1381,6 +1400,7 @@ function createBench() {
 function toggleSit() {
   if (!bryce || !bench) return; // Bryce only
   if (mode !== 'walk' || flying) return;
+  if (carState !== 'none') return; // can't sit down while in the car
   if (sitState === 'stand') {
     const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
     if (d > SIT_RANGE) return;
@@ -1441,7 +1461,245 @@ function updateSitPrompt() {
   }
 }
 
+// ---------- car + driving (Mixamo Entering Car / Driving / Exiting Car) ----------
+// One procedural car on the pier plaza, 9m north of the spawn, facing the
+// harbour (+Z, same as the spawn). Driving is Bryce-only. State machine:
+// 'none' -> F near the driver door -> 'entering' (Entering Car one-shot)
+// -> 'driving' (Driving loop, W/S throttle, A/D steering) -> F ->
+// 'exiting' (Exiting Car one-shot) -> 'none'. No collision in v1: the
+// car drives through buildings. The driver door is on the right side
+// (Hong Kong right-hand drive; facing +Z, right is -X).
+let car = null; // { group, pos, yaw, speed }
+let carState = 'none';
+const CAR_RANGE = 3;
+const CAR_ACCEL = 8, CAR_BRAKE = 20, CAR_DRAG = 1.2;
+const CAR_MAX_SPEED = 15, CAR_MAX_FAST = 25, CAR_MAX_REVERSE = 5;
+const CAR_DOOR_LOCAL = new THREE.Vector3(-1.15, 0, 0.4);
+const CAR_SEAT_LOCAL = new THREE.Vector3(-0.45, 0.35, 0.3);
+
+function carLocalToWorld(local) {
+  // rotate a car-local offset by the car's yaw, add the car position
+  const c = Math.cos(car.yaw), s = Math.sin(car.yaw);
+  return new THREE.Vector3(
+    car.pos.x + local.x * c + local.z * s,
+    car.pos.y + local.y,
+    car.pos.z - local.x * s + local.z * c
+  );
+}
+
+function createCar() {
+  if (car) { scene.remove(car.group); car = null; }
+  if (!model) return;
+  // 9m north of the spawn on the open plaza (17m+ clear of buildings)
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z - 9;
+  const cy = groundHeight(sx, sz, 50);
+  const g = new THREE.Group();
+  const paint = new THREE.MeshStandardMaterial({ color: 0x2a3542, roughness: 0.35, metalness: 0.6 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x0e151c, roughness: 0.1, metalness: 0.8 });
+  const tyre = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+  const light = new THREE.MeshStandardMaterial({ color: 0xfff6c9, roughness: 0.3, emissive: 0x555533 });
+  const box = (w, h, d, m, x, y, z) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    g.add(b);
+    return b;
+  };
+  box(1.9, 0.7, 4.5, paint, 0, 0.65, 0);        // body
+  box(1.7, 0.6, 2.2, paint, 0, 1.25, -0.2);     // cabin
+  box(1.74, 0.45, 2.0, glass, 0, 1.25, -0.2);   // window band
+  box(0.35, 0.18, 0.06, light, -0.6, 0.7, 2.26); // headlights
+  box(0.35, 0.18, 0.06, light, 0.6, 0.7, 2.26);
+  const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.25, 16);
+  for (const [wx, wz] of [[-0.85, 1.45], [0.85, 1.45], [-0.85, -1.45], [0.85, -1.45]]) {
+    const w = new THREE.Mesh(wheelGeo, tyre);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(wx, 0.35, wz);
+    g.add(w);
+  }
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(sx, cy, sz);
+  g.rotation.y = 0; // facing south (+Z), same as the spawn
+  scene.add(g);
+  car = { group: g, pos: new THREE.Vector3(sx, cy, sz), yaw: 0, speed: 0 };
+}
+
+function toggleCar() {
+  if (!bryce || !car) return; // Bryce only
+  if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return; // can't get in while sitting down
+  if (carState === 'none') {
+    const door = carLocalToWorld(CAR_DOOR_LOCAL);
+    const d = Math.hypot(charPos.x - door.x, charPos.z - door.z);
+    if (d > CAR_RANGE) return;
+    if (bryce.oneShot) return; // wait for a move (e.g. punch) to finish
+    if (!bryce.clips['Entering Car'] || !bryce.clips['Driving']) return;
+    // snap to the door (v1: no walk-up animation)
+    carState = 'entering';
+    charPos.set(door.x, groundHeight(door.x, door.z, car.pos.y), door.z);
+    charYaw = car.yaw;
+    charGroup.position.copy(charPos);
+    charGroup.rotation.y = charYaw;
+    bryce.group.position.copy(charPos);
+    bryce.group.rotation.y = charYaw;
+    if (!playOneShot('Entering Car', () => {
+      if (carState !== 'entering') return; // cancelled (mode switch / reset)
+      carState = 'driving';
+      playLoco('Driving');
+    })) carState = 'none';
+  } else if (carState === 'driving') {
+    if (bryce.oneShot) return;
+    if (!bryce.clips['Exiting Car']) return;
+    carState = 'exiting';
+    car.speed = 0;
+    if (!playOneShot('Exiting Car', () => {
+      if (carState !== 'exiting') return; // cancelled
+      exitCarToGround();
+    })) carState = 'driving';
+  }
+  // 'entering' / 'exiting' transitions ignore F
+}
+
+function exitCarToGround() {
+  // Bryce back on the ground by the driver door, walk mode resumes
+  const door = carLocalToWorld(CAR_DOOR_LOCAL);
+  charPos.set(door.x, groundHeight(door.x, door.z, car.pos.y), door.z);
+  charYaw = car.yaw;
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  bryce.group.position.copy(charPos);
+  bryce.group.rotation.y = charYaw;
+  carState = 'none';
+  playLoco('Idle');
+}
+
+function cancelCar() {
+  // force out of the car without the animation (mode switch / respawn).
+  // The in-flight one-shot (if any) still finishes on its own, but its
+  // onDone is guarded by carState and returns early; updateWalk's
+  // playLoco('Idle') then takes over on the next frame.
+  if (carState === 'none') return;
+  if (car) exitCarToGround(); // also resets carState + plays Idle
+  else carState = 'none';
+}
+
+const carPromptEl = document.getElementById('car-prompt');
+const carBtnEl = document.getElementById('carBtn');
+let lastCarPrompt = null;
+function updateCarPrompt() {
+  let text = '';
+  if (car && bryce && mode === 'walk') {
+    if (carState === 'driving' || carState === 'entering') text = '按 F 下車';
+    else if (carState === 'none' && !flying) {
+      const door = carLocalToWorld(CAR_DOOR_LOCAL);
+      const d = Math.hypot(charPos.x - door.x, charPos.z - door.z);
+      if (d <= CAR_RANGE) text = '按 F 上車';
+    }
+  }
+  if (text !== lastCarPrompt) {
+    lastCarPrompt = text;
+    carPromptEl.textContent = text;
+    carPromptEl.style.display = text ? 'block' : 'none';
+    carBtnEl.textContent = (carState === 'driving' || carState === 'entering') ? '下車 (F)' : '上車 (F)';
+  }
+}
+
+function updateDrive(dt) {
+  // arcade driving: W/S throttle + brake/reverse, A/D steering,
+  // Shift for the faster top speed. No collision in v1.
+  const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
+  const maxSpeed = running ? CAR_MAX_FAST : CAR_MAX_SPEED;
+  if (keys['KeyW']) car.speed += CAR_ACCEL * dt;
+  else if (keys['KeyS']) {
+    // brake hard while moving forward, reverse once stopped
+    car.speed -= (car.speed > 0.5 ? CAR_BRAKE : CAR_ACCEL * 0.6) * dt;
+  } else {
+    // coast down: rolling drag + air drag (never overshoots past 0)
+    car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), (0.5 + Math.abs(car.speed) * CAR_DRAG) * dt);
+  }
+  car.speed = THREE.MathUtils.clamp(car.speed, -CAR_MAX_REVERSE, maxSpeed);
+  // steering: needs motion (no turning at a standstill), reversed in reverse
+  const steer = (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0);
+  const grip = Math.min(1, Math.abs(car.speed) / 4);
+  car.yaw += steer * 1.1 * grip * Math.sign(car.speed) * dt;
+  const fwd = new THREE.Vector3(Math.sin(car.yaw), 0, Math.cos(car.yaw));
+  car.pos.addScaledVector(fwd, car.speed * dt);
+  // stay inside the map (same bounds as the walker)
+  if (bounds) {
+    let hit = false;
+    if (car.pos.x < bounds.minX) { car.pos.x = bounds.minX; hit = true; }
+    if (car.pos.x > bounds.maxX) { car.pos.x = bounds.maxX; hit = true; }
+    if (car.pos.z < bounds.minZ) { car.pos.z = bounds.minZ; hit = true; }
+    if (car.pos.z > bounds.maxZ) { car.pos.z = bounds.maxZ; hit = true; }
+    if (hit) { car.speed = 0; showBoundaryToast(); }
+  }
+  // follow the ground (smoothly, like the walker)
+  const gy = groundHeight(car.pos.x, car.pos.z, car.pos.y);
+  car.pos.y += (gy - car.pos.y) * Math.min(1, dt * 6);
+  car.group.position.copy(car.pos);
+  car.group.rotation.y = car.yaw;
+  // the character rides along: nav HUD + shadow focus track charPos
+  charPos.copy(car.pos);
+  charYaw = car.yaw;
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  if (bryce) {
+    bryce.group.position.copy(carLocalToWorld(CAR_SEAT_LOCAL));
+    bryce.group.rotation.y = car.yaw;
+    playLoco('Driving');
+  }
+  // chase camera: behind the car at the walk-mode distance (wheel works)
+  const target = new THREE.Vector3(car.pos.x, car.pos.y + 2.2, car.pos.z);
+  const desired = target.clone().addScaledVector(fwd, -camDist).add(new THREE.Vector3(0, 2.5, 0));
+  camera.position.lerp(desired, Math.min(1, dt * 5));
+  camera.lookAt(target);
+}
+
+// ---------- pier mid-section deck (fills the data gap in I35846) ----------
+// The government pier model covers the shore end and the tip only; the
+// middle (Blender Y -520..-560, centreline X 270) has no deck at all,
+// so walking south along the pier drops you into the sea. This patch
+// is one concrete box over the gap. Coordinates are converted from the
+// raw (pre-recenter) frame exactly like the spawn: scene X/Z = raw -
+// modelCenter, scene Y = raw + model.position.y (frameModel shifts the
+// model so its bbox minimum sits at y=0). The patch is 44m long (2m
+// overlap each end, so a few metres of uncertainty in the real deck's
+// edge can't leave a gap) and its top sits 2cm below the tip deck
+// (5.78m raw) so the overlap shows the real deck, not a z-fight.
+let pierDeck = null; // { mesh, entry }
+function createPierDeck() {
+  if (pierDeck) {
+    scene.remove(pierDeck.mesh);
+    const i = raycastTargets.indexOf(pierDeck.entry);
+    if (i >= 0) raycastTargets.splice(i, 1);
+    pierDeck = null;
+  }
+  if (!model) return;
+  const dx = 270 - modelCenter.x;
+  const dz = 540 - modelCenter.z; // gap centre, raw z 520..560
+  const topY = 5.76 + model.position.y;
+  const deck = new THREE.Mesh(
+    new THREE.BoxGeometry(11, 0.5, 44),
+    new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 0.9 })
+  );
+  deck.position.set(dx, topY - 0.25, dz);
+  deck.castShadow = true;
+  deck.receiveShadow = true;
+  scene.add(deck);
+  deck.updateMatrixWorld(true);
+  // walkable: add it to the ground raycast targets (same shape as
+  // buildRaycastTargets entries), so groundHeight returns the deck
+  // top instead of the seabed when the character is on it
+  const box = new THREE.Box3().setFromObject(deck);
+  const entry = { mesh: deck,
+    minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z };
+  raycastTargets.push(entry);
+  pierDeck = { mesh: deck, entry };
+}
+
 function updateWalk(dt) {
+  // driving: the car has its own update (movement, ground, camera)
+  if (carState === 'driving') { updateDrive(dt); return; }
   // movement relative to the camera's view direction
   const fwd = new THREE.Vector3(charPos.x - camera.position.x, 0, charPos.z - camera.position.z);
   if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
@@ -1459,16 +1717,17 @@ function updateWalk(dt) {
   }
   moving = move.lengthSq() > 0;
   // martial arts: plant the feet while a move is playing; same while
-  // sitting down / seated / standing up
+  // sitting down / seated / standing up, and while getting in/out of
+  // the car (the one-shot's root motion does the moving, not the keys)
   const pose = actionPose(clock.elapsedTime);
-  if (pose || (bryce && bryce.oneShot) || sitState !== 'stand') { move.set(0, 0, 0); moving = false; }
+  if (pose || (bryce && bryce.oneShot) || sitState !== 'stand' || carState !== 'none') { move.set(0, 0, 0); moving = false; }
   const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
   const wantFly = keys['Space'] || touchFlyUp;
   const wantDown = keys['ControlLeft'] || keys['ControlRight'] || touchFlyDown;
   // vertical: hold Space to fly up, Ctrl to descend; otherwise hover.
-  // No flying while seated.
+  // No flying while seated or in the car.
   let vy = 0;
-  if (wantFly && sitState === 'stand') { flying = true; vy = 12; }
+  if (wantFly && sitState === 'stand' && carState === 'none') { flying = true; vy = 12; }
   if (wantDown) { vy = -12; }
   if (moving) {
     // analog stick: slight push = slow walk (keyboard input is always
@@ -1563,6 +1822,7 @@ function animate() {
   updateFerry(dt, clock.elapsedTime);
   if (bryce && bryce.mixer) bryce.mixer.update(dt);
   updateSitPrompt();
+  updateCarPrompt();
   updateShadowFocus();
   updateNavHud(dt);
   renderer.render(scene, camera);
