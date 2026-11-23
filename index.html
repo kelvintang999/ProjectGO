@@ -447,7 +447,7 @@ const dropHint = document.getElementById('drop-hint');
 
 // Build label (test 11⑩: nothing on the page showed the version).
 // Shown on the main menu + the HUD stats line; bump on every push.
-const BUILD_VERSION = '2026-11-23-8';
+const BUILD_VERSION = '2026-11-23-9';
 document.getElementById('version-menu').textContent = '版本 ' + BUILD_VERSION;
 
 // ---------- renderer / scene ----------
@@ -1864,8 +1864,13 @@ const modelParam = params.get('model');
 function tryCandidates(candidates) {
   (function tryNext(i) {
     if (i >= candidates.length) { setStatus('尚未載入模型，請選擇 full_tst_tile.glb'); return; }
-    fetch(candidates[i], { method: 'HEAD' }).then((r) => {
-      if (r.ok) loadFromUrl(candidates[i], candidates[i].slice(2));
+    // Probe with a 1-byte Range GET, NOT HEAD: R2's CORS rules only
+    // cover GET, so a cross-origin HEAD gets no Access-Control-Allow-Origin
+    // and the fetch rejects even though the file exists (this broke the
+    // R2 switch in build -8). Range is a CORS-safelisted header, so this
+    // stays a simple request; R2 answers 206 + ACAO.
+    fetch(candidates[i], { headers: { Range: 'bytes=0-0' } }).then((r) => {
+      if (r.ok) loadFromUrl(candidates[i], candidates[i].split('/').pop());
       else tryNext(i + 1);
     }).catch(() => tryNext(i + 1));
   })(0);
@@ -1899,7 +1904,7 @@ function shouldAutoLite() {
 }
 function loadRecovery(target) {
   const file = target === 'lite' ? 'https://pub-416445574a884243bd824c17d0b5a289.r2.dev/full_tst_tile_lite.glb' : 'https://pub-416445574a884243bd824c17d0b5a289.r2.dev/full_tst_tile_ulite.glb';
-  loadFromUrl(file, file.slice(2));
+  loadFromUrl(file, file.split('/').pop());
 }
 if (modelParam) {
   // direct load: skip the main menu AND the quality choice
