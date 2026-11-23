@@ -2162,14 +2162,25 @@ function playOneShot(name, onDone) {
   a.timeScale = Math.max(1, bryce.clips[name].duration / target);
   bryce.oneShot = a;
   if (ATTACK_CLIPS.has(name)) checkNpcHits(); // attack one-shot: NPC hit check (see npc-combat)
-  const done = (e) => {
-    if (e.action !== a) return;
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(watchdog);
     bryce.mixer.removeEventListener('finished', done);
     bryce.oneShot = null;
     if (onDone) onDone();
     else if (bryce.loco) bryceFadeTo(bryce.loco, 0.2);
   };
+  const done = (e) => {
+    if (e.action !== a) return;
+    finish();
+  };
   bryce.mixer.addEventListener('finished', done);
+  // watchdog: if 'finished' never fires, the one-shot stays stuck and
+  // blocks every exit (test 10's dead-button pattern) — force
+  // completion a little past the expected end instead of hanging
+  const watchdog = setTimeout(finish, (target + 1.5) * 1000);
   return true;
 }
 
@@ -2816,7 +2827,7 @@ let lastSitPrompt = null;
 function updateSitPrompt() {
   let text = '';
   if (bench && bryce && mode === 'walk') {
-    if (sitState === 'seated' || sitState === 'sitting') text = '按 E 站起來';
+    if (sitState === 'seated') text = '按 E 站起來'; // 'sitting' is a transition: E is ignored then, so no prompt (test 10)
     else if (sitState === 'stand' && !flying) {
       const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
       if (d <= SIT_RANGE) text = '按 E 坐下';
@@ -2848,7 +2859,7 @@ const CAR_RANGE = 3.5; // measured from the car CENTRE (like the bike):
 // trigger, so walking up casually never showed the prompt (2026-11-23
 // browser test could not enter the car at all). Car half-diagonal is
 // ~2.5m, so 3.5m covers the whole car + a step around it.
-const CAR_ACCEL = 5.6, CAR_BRAKE = 20, CAR_DRAG = 1.2;
+const CAR_ACCEL = 5.6, CAR_BRAKE = 20, CAR_DRAG = 0.4; // drag 0.4 (was 1.2 — at 5 m/s it braked harder than the engine accelerates; test 9/10)
 const CAR_MAX_SPEED = 19.5, CAR_MAX_FAST = 32.5, CAR_MAX_REVERSE = 5; // top speed +30%, accel -30% (2026-11-23 user)
 const CAR_DOOR_LOCAL = new THREE.Vector3(1.15, 0, 0.4);
 // Entering Car's root motion carries the character +1.76m forward (measured
@@ -2933,6 +2944,7 @@ function toggleCar() {
     carState = 'entering';
     const start = carLocalToWorld(CAR_ENTER_START_LOCAL);
     charPos.set(start.x, groundHeight(start.x, start.z, car.pos.y), start.z);
+    _prevPos.copy(charPos); // so the speedometer doesn't spike on the enter snap
     charYaw = car.yaw;
     charGroup.position.copy(charPos);
     charGroup.rotation.y = charYaw;
@@ -2960,6 +2972,7 @@ function exitCarToGround() {
   // Bryce back on the ground by the driver door, walk mode resumes
   const door = carLocalToWorld(CAR_DOOR_LOCAL);
   charPos.set(door.x, groundHeight(door.x, door.z, car.pos.y), door.z);
+  _prevPos.copy(charPos); // so the speedometer doesn't spike on the exit snap
   charYaw = car.yaw;
   charGroup.position.copy(charPos);
   charGroup.rotation.y = charYaw;
@@ -2984,7 +2997,7 @@ let lastCarPrompt = null;
 function updateCarPrompt() {
   let text = '';
   if (car && bryce && mode === 'walk') {
-    if (carState === 'driving' || carState === 'entering') text = '按 F 下車';
+    if (carState === 'driving') text = '按 F 下車'; // 'entering' is a transition: F is ignored then, so no prompt (test 10)
     else if (carState === 'none' && !flying) {
       const d = Math.hypot(charPos.x - car.pos.x, charPos.z - car.pos.z);
       if (d <= CAR_RANGE) text = '按 F 上車';
@@ -3072,12 +3085,17 @@ function createStall() {
   ctx.fillText('大排檔', 128, 34);
   const signTex = new THREE.CanvasTexture(c);
   signTex.colorSpace = THREE.SRGBColorSpace;
-  const sign = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.2, 0.55),
-    new THREE.MeshBasicMaterial({ map: signTex, side: THREE.DoubleSide })
-  );
+  // two planes, one per side: a single DoubleSide plane mirrors the text
+  // from behind (test 9). The back plane is rotated 180° so the text
+  // reads correctly from both sides.
+  const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), signMat);
   sign.position.set(0, 2.6, 1.18);
   g.add(sign);
+  const signBack = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), signMat);
+  signBack.position.set(0, 2.6, 1.16);
+  signBack.rotation.y = Math.PI;
+  g.add(signBack);
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   g.position.set(tx, ty, tz);
   g.rotation.y = -Math.PI / 2;
@@ -3675,7 +3693,7 @@ let lastBikePrompt = null;
 function updateBikePrompt() {
   let text = '';
   if (bike && bryce && mode === 'walk') {
-    if (bikeState === 'riding' || bikeState === 'mounting') text = '按 F 下車';
+    if (bikeState === 'riding') text = '按 F 下車'; // 'mounting' is a transition: F is ignored then, so no prompt (test 10)
     else if (bikeState === 'none' && !flying) {
       const d = Math.hypot(charPos.x - bike.pos.x, charPos.z - bike.pos.z);
       if (d <= BIKE_RANGE) text = '按 F 騎車';
@@ -3807,6 +3825,7 @@ const interactRowEl = document.getElementById('interact-row');
 const interactBtnEl = document.getElementById('interactBtn');
 let ctxAction = null; // action the button currently offers (null = hidden)
 let lastCtxAction = undefined; // last action written to the DOM
+let lastModeLabel = null; // last mode-toggle label written to the DOM
 const CTX_LABELS = {
   wake: '☀️ 起床 (E)',
   stand: '🧍 站起來 (E)',
@@ -3821,11 +3840,15 @@ const CTX_LABELS = {
 function updateContextButton() {
   let action = null;
   if (mode === 'walk' && !inRoom) {
-    // exits first (same order as tryInteract / toggleVehicle)
+    // exits first (same order as tryInteract / toggleVehicle) — only
+    // steady states offer an exit: during a 1s transition ('sitting' /
+    // 'standing' / 'entering' / 'exiting' / 'mounting') the handlers
+    // silently ignore input, so showing the button then is a lie that
+    // makes the user hammer a dead button (test 10)
     if (sleepState !== 'awake') action = 'wake';
-    else if (sitState !== 'stand') action = 'stand';
-    else if (carState === 'driving' || carState === 'entering') action = 'exit-car';
-    else if (bikeState === 'riding' || bikeState === 'mounting') action = 'exit-bike';
+    else if (sitState === 'seated') action = 'stand';
+    else if (carState === 'driving') action = 'exit-car';
+    else if (bikeState === 'riding') action = 'exit-bike';
     else if (!flying) {
       let bestD = Infinity;
       if (bench && bryce) {
@@ -3851,6 +3874,15 @@ function updateContextButton() {
     }
   }
   ctxAction = action;
+  // mode label: driving / riding are states, not modes — the toggle
+  // button only knows walk/fly, so it lies while driving (test 10)
+  const modeLabel = carState === 'driving' ? '模式：開車'
+    : bikeState === 'riding' ? '模式：騎車'
+    : '模式：' + (mode === 'walk' ? '步行' : '飛行');
+  if (modeLabel !== lastModeLabel) {
+    lastModeLabel = modeLabel;
+    document.getElementById('modeToggle').textContent = modeLabel;
+  }
   if (action === lastCtxAction) return;
   lastCtxAction = action;
   if (!action) { interactRowEl.style.display = 'none'; return; }
@@ -4073,6 +4105,28 @@ function toggleRoom() {
 
 function clampToRoom() {
   if (!roomCenter) return;
+  charPos.x = THREE.MathUtils.clamp(charPos.x, roomCenter.x - ROOM_HALF_X, roomCenter.x + ROOM_HALF_X);
+  charPos.z = THREE.MathUtils.clamp(charPos.z, roomCenter.z - ROOM_HALF_Z, roomCenter.z + ROOM_HALF_Z);
+  // furniture collision: bed + table as AABBs (room-local coords,
+  // expanded by the 0.4m player radius) — without this Bryce walks onto
+  // the mattress (test 9). Push out along the axis of least penetration.
+  const lx = charPos.x - roomCenter.x, lz = charPos.z - roomCenter.z;
+  const boxes = [
+    [-4.6, -2.6, -4.1, -1.1], // bed (frame 1.2 x 2.2 at -3.6, -2.6)
+    [2.4, 4.8, -3.6, -2.0], // table (1.6 x 0.8 at 3.6, -2.8)
+  ];
+  for (const [minX, maxX, minZ, maxZ] of boxes) {
+    if (lx < minX || lx > maxX || lz < minZ || lz > maxZ) continue;
+    const dxMin = lx - minX, dxMax = maxX - lx, dzMin = lz - minZ, dzMax = maxZ - lz;
+    const m = Math.min(dxMin, dxMax, dzMin, dzMax);
+    if (m === dxMin) charPos.x = roomCenter.x + minX;
+    else if (m === dxMax) charPos.x = roomCenter.x + maxX;
+    else if (m === dzMin) charPos.z = roomCenter.z + minZ;
+    else charPos.z = roomCenter.z + maxZ;
+    break;
+  }
+  // the push-out can overshoot the walls (bed/table boxes extend past
+  // the walkable margin), so clamp again
   charPos.x = THREE.MathUtils.clamp(charPos.x, roomCenter.x - ROOM_HALF_X, roomCenter.x + ROOM_HALF_X);
   charPos.z = THREE.MathUtils.clamp(charPos.z, roomCenter.z - ROOM_HALF_Z, roomCenter.z + ROOM_HALF_Z);
 }
