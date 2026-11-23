@@ -16,6 +16,7 @@
   #hud h1 { font-size: 16px; margin: 0 0 4px; font-weight: 700; }
   #hud p { font-size: 12px; line-height: 1.6; margin: 4px 0; color: #b9c6da; white-space: pre-line; }
   #hud .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  #hud .row.hud-group { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.12); }
   button {
     font: inherit; font-size: 13px; color: #fff; background: #2563eb; border: 0;
     border-radius: 8px; padding: 8px 12px; cursor: pointer;
@@ -25,6 +26,10 @@
   #bar-wrap { height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; margin-top: 8px; display: none; }
   #bar { height: 100%; width: 0%; background: #38bdf8; }
   #status { font-size: 12px; color: #7dd3fc; min-height: 16px; }
+  #health-wrap { height: 8px; background: rgba(255,255,255,0.15); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  #health-fill { height: 100%; width: 100%; background: #22c55e; transition: width 0.3s; }
+  #hud #health-text { color: #e8eef7; }
+  #hud #buff-text { color: #fbbf24; min-height: 16px; }
   #help {
     position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
     color: #dbe4f0; background: rgba(10, 16, 28, 0.72); border: 1px solid rgba(255,255,255,0.14);
@@ -35,6 +40,62 @@
     background: rgba(37, 99, 235, 0.25); border: 3px dashed #60a5fa; border-radius: 16px;
     color: #fff; font-size: 22px; font-weight: 700; pointer-events: none;
   }
+  #quality-choice {
+    position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center;
+    background: rgba(8, 12, 22, 0.94); backdrop-filter: blur(4px);
+  }
+  #quality-choice .panel { width: min(420px, 92vw); text-align: center; }
+  #quality-choice h1 { color: #e8eef7; font-size: 30px; margin: 0 0 6px; font-weight: 700; }
+  #quality-choice .sub { color: #b9c6da; font-size: 13px; margin: 0 0 24px; }
+  .qc-btn {
+    display: block; width: 100%; margin: 0 0 12px; padding: 16px 18px; text-align: left;
+    font-size: 17px; font-weight: 700; border-radius: 12px; min-height: 48px;
+  }
+  .qc-btn .qc-tag {
+    display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px;
+    background: #22c55e; color: #fff; font-size: 12px; font-weight: 700; vertical-align: middle;
+  }
+  .qc-btn .qc-desc { display: block; margin-top: 5px; font-size: 13px; font-weight: 400; color: #cbd5e1; }
+  .qc-btn .qc-warn { display: block; margin-top: 5px; font-size: 12px; font-weight: 400; color: #fca5a5; }
+  #quality-choice .note { color: #94a3b8; font-size: 12px; margin: 16px 0 0; }
+  /* main menu + in-game menu: same fullscreen-overlay look as the
+     quality chooser. Main menu (z 30) is the first screen; the pause
+     menu (z 31) sits on top of everything while playing; the settings
+     screen (z 32) sits one layer above the menus. */
+  #main-menu {
+    position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+    background: rgba(8, 12, 22, 0.94); backdrop-filter: blur(4px);
+  }
+  #pause-menu {
+    position: fixed; inset: 0; z-index: 31; display: none; align-items: center; justify-content: center;
+    background: rgba(8, 12, 22, 0.88); backdrop-filter: blur(4px);
+  }
+  #settings-menu {
+    position: fixed; inset: 0; z-index: 32; display: none; align-items: center; justify-content: center;
+    background: rgba(8, 12, 22, 0.94); backdrop-filter: blur(4px);
+  }
+  #main-menu .panel, #pause-menu .panel, #settings-menu .panel { width: min(420px, 92vw); max-height: 86vh; overflow-y: auto; text-align: center; }
+  #main-menu h1, #pause-menu h1, #settings-menu h1 { color: #e8eef7; font-size: 30px; margin: 0 0 6px; font-weight: 700; }
+  #main-menu .sub, #pause-menu .sub, #settings-menu .sub { color: #b9c6da; font-size: 13px; margin: 0 0 16px; }
+  #main-menu .pitch { color: #e8eef7; font-size: 14px; line-height: 1.6; margin: 0 0 20px; }
+  .menu-start { min-height: 52px; text-align: center; }
+  .menu-section { color: #e8eef7; font-size: 13px; font-weight: 700; text-align: left; margin: 0 0 8px; }
+  .menu-list { text-align: left; margin: 0 0 16px; padding: 0; list-style: none; }
+  .menu-list li { color: #cbd5e1; font-size: 13px; line-height: 1.7; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .menu-list li:last-child { border-bottom: 0; }
+  .menu-list .label { color: #e8eef7; font-weight: 700; }
+  .menu-controls { text-align: left; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px 14px; margin: 0 0 8px; }
+  .menu-controls h2 { color: #e8eef7; font-size: 13px; margin: 0 0 6px; font-weight: 700; }
+  .menu-controls p { color: #b9c6da; font-size: 13px; line-height: 1.8; margin: 0; }
+  #main-menu .note, #pause-menu .note, #settings-menu .note { color: #94a3b8; font-size: 12px; margin: 16px 0 0; }
+  /* settings rows: label left, on/off value right (min-height 48px comes from .qc-btn) */
+  .set-row { display: flex; justify-content: space-between; align-items: center; }
+  .set-row .set-val { color: #e8eef7; font-weight: 700; }
+  .set-soon { color: #94a3b8; font-size: 12px; text-align: left; margin: -8px 0 16px; }
+  .set-swatch-row { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+  .set-swatch-label { color: #e8eef7; font-size: 14px; width: 36px; text-align: left; flex: none; }
+  .swatch { width: 32px; height: 32px; border-radius: 50%; padding: 0; border: 2px solid rgba(255,255,255,0.35); cursor: pointer; flex: none; }
+  .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px #2563eb; }
   #toast {
     position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%) translateY(8px); z-index: 11;
     color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
@@ -42,10 +103,52 @@
     transition: opacity 0.3s, transform 0.3s; white-space: nowrap;
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #sit-prompt {
+    position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); z-index: 11;
+    color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
+    display: none; pointer-events: none;
+  }
+  #car-prompt {
+    position: fixed; bottom: 156px; left: 50%; transform: translateX(-50%); z-index: 11;
+    color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
+    display: none; pointer-events: none;
+  }
+  #eat-prompt {
+    position: fixed; bottom: 202px; left: 50%; transform: translateX(-50%); z-index: 11;
+    color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
+    display: none; pointer-events: none;
+  }
+  #sleep-prompt {
+    position: fixed; bottom: 248px; left: 50%; transform: translateX(-50%); z-index: 11;
+    color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
+    display: none; pointer-events: none;
+  }
+  #bike-prompt {
+    position: fixed; bottom: 294px; left: 50%; transform: translateX(-50%); z-index: 11;
+    color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 10px 20px; font-size: 14px; white-space: nowrap;
+    display: none; pointer-events: none;
+  }
+  /* sleep fade: black overlay for the no-clip fallback (1s fade each way).
+     z-index 20 covers the HUD/prompts/toast, stays under the menus (30+). */
+  #sleep-fade {
+    position: fixed; inset: 0; z-index: 20; background: #000;
+    opacity: 0; pointer-events: none; transition: opacity 1s;
+  }
   #nav-hud {
     position: fixed; top: 12px; right: 12px; z-index: 10; text-align: right;
     color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.8); pointer-events: none;
     display: none;
+  }
+  /* map data attribution — always visible, outside #hud so UI collapse never hides it */
+  #credit {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9;
+    color: rgba(255,255,255,0.65); text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    font-size: 11px; white-space: nowrap; pointer-events: none;
   }
   #nav-speed { font-size: 56px; font-weight: 200; line-height: 1; letter-spacing: -1px; }
   #nav-unit { font-size: 13px; color: #cbd5e1; margin-top: 2px; }
@@ -77,9 +180,32 @@
     .kb-help { display: none; }
     .touch-help { display: inline; }
     #help { bottom: 210px; white-space: normal; max-width: 92vw; text-align: center; }
-    #toast { bottom: 160px; }
+    #toast { bottom: 160px; white-space: normal; max-width: 92vw; text-align: center; }
+    #sit-prompt { bottom: 260px; }
+    #car-prompt { bottom: 310px; }
+    #eat-prompt { bottom: 360px; }
+    #sleep-prompt { bottom: 410px; }
+    #bike-prompt { bottom: 460px; }
+    #uiToggle { bottom: 100px; right: 20px; } /* above the 64px touch buttons (top edge 84px) */
+    #menuBtn { bottom: 158px; right: 20px; } /* above #uiToggle (100 + 48 + 10) */
   }
   #err { color: #fca5a5; }
+  /* UI collapse toggle: always visible, bottom-right (above the touch
+     buttons on mobile). Collapsing hides the HUD panel + help line only;
+     nav HUD, touch controls, prompts and toast stay visible. */
+  #uiToggle {
+    position: fixed; right: 12px; bottom: 12px; z-index: 15;
+    width: 48px; height: 48px; border-radius: 50%; padding: 0; font-size: 20px;
+    background: rgba(51, 65, 85, 0.85); border: 1px solid rgba(255,255,255,0.25);
+  }
+  /* in-game menu button: pill, bottom-right above #uiToggle, outside
+     #hud so it stays visible when the UI is collapsed */
+  #menuBtn {
+    position: fixed; right: 12px; bottom: 70px; z-index: 15;
+    min-height: 48px; padding: 10px 18px; border-radius: 999px; font-size: 14px;
+    background: rgba(51, 65, 85, 0.85); border: 1px solid rgba(255,255,255,0.25);
+  }
+  body.ui-collapsed #hud, body.ui-collapsed #help { display: none; }
 </style>
 </head>
 <body>
@@ -91,27 +217,38 @@
   <p id="stats"></p>
   <div id="bar-wrap"><div id="bar"></div></div>
   <p id="status">正在載入模型…</p>
+  <div id="health-wrap"><div id="health-fill"></div></div>
+  <p id="health-text">體力 100/100</p>
+  <p id="buff-text"></p>
   <div class="row">
-    <button id="pick">選擇 .glb 檔案</button>
-    <button id="reset" class="secondary">重置視角</button>
-    <button id="shadowToggle" class="secondary">陰影：開</button>
-    <button id="modeToggle" class="secondary">模式：飛行</button>
-    <button id="navToggle" class="secondary">導航模式：開</button>
-    <button id="nightToggle" class="secondary">夜間：關</button>
+    <button id="modeToggle" class="secondary">模式：步行</button>
+  </div>
+  <div class="row hud-group">
     <button id="punchBtn" class="secondary">拳 (J)</button>
     <button id="kickBtn" class="secondary">腿 (K)</button>
     <button id="comboBtn" class="secondary">連招 (L)</button>
+    <button id="drinkBtn" class="secondary">喝水 (T)</button>
+  </div>
+  <div id="interact-row" class="row hud-group" style="display:none">
+    <button id="interactBtn" class="secondary">互動</button>
   </div>
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
 
-<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降</span></div>
+<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下／吃飯／睡覺 · F 上車／騎車 · T 喝水 · H 收起介面</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車／騎車：搖桿上推加速、左右轉向 · 右下角按鈕收起介面</span></div>
 <div id="toast"></div>
+<div id="sit-prompt"></div>
+<div id="car-prompt"></div>
+<div id="eat-prompt"></div>
+<div id="sleep-prompt"></div>
+<div id="bike-prompt"></div>
+<div id="sleep-fade"></div>
 <div id="nav-hud">
   <div id="nav-speed">0</div>
   <div id="nav-unit">km/h</div>
   <div id="nav-nav">尖沙咀</div>
 </div>
+<div id="credit" title="地圖資料來源：香港特別行政區政府地政總署三維空間數據（3D-BIT00），經空間數據共享平台（CSDI）提供；知識產權屬香港特區政府所有">地圖資料：香港特區政府地政總署 · 3D-BIT00 · CSDI</div>
 <div id="touch-ui">
   <div id="joy"><div id="joy-knob"></div></div>
   <div id="touch-btns">
@@ -120,7 +257,98 @@
     <button id="btn-down" class="touch-btn">降</button>
   </div>
 </div>
+<button id="uiToggle" title="收起／展開介面 (H)">☰</button>
+<button id="menuBtn" title="選單 (Esc)">選單</button>
 <div id="drop-hint">放開以載入 .glb</div>
+<div id="main-menu">
+  <div class="panel">
+    <h1>Project GO</h1>
+    <p class="sub">尖沙咀 3D · 自由探索</p>
+    <p class="pitch">在尖沙咀自由探索——步行、開車、騎車、坐下休息、打拳</p>
+    <button id="menu-start" class="qc-btn menu-start">開始遊戲</button>
+    <p class="menu-section">可以做的事</p>
+    <ul class="menu-list">
+      <li>🚶 <span class="label">步行探索</span>——尖沙咀碼頭、海濱、廣東道</li>
+      <li>🚗 <span class="label">開車</span>——走到車旁按 F（手機點「上車」）</li>
+      <li>🏍️ <span class="label">騎車</span>——走到機車旁按 F（手機點「騎車」）</li>
+      <li>🪑 <span class="label">坐下休息</span>——走到長椅按 E（手機點「坐下」）</li>
+      <li>🍜 <span class="label">吃飯</span>——大排檔按 E，體力 +25、跑快啲</li>
+      <li>🛏️ <span class="label">睡覺</span>——走到床邊按 E，體力回滿</li>
+      <li>🥊 <span class="label">打拳</span>——J 出拳、K 出腿、L 連招</li>
+    </ul>
+    <div class="menu-controls">
+      <h2>操作說明</h2>
+      <p><span class="touch-help">左搖桿移動 · 拖曳轉鏡頭 · 右下按鈕：跑／升／降 · 開車／騎車：搖桿上推加速、左右轉向</span><span class="kb-help">WASD 移動 · Shift 跑 · 空白鍵飛 · 滑鼠轉鏡頭 · 滾輪縮放 · E 坐下 · F 上車／騎車 · T 喝水 · H 收起介面 · Esc 選單</span></p>
+    </div>
+    <p class="note">地圖資料：香港特區政府地政總署 · 3D-BIT00 · CSDI</p>
+  </div>
+</div>
+<div id="pause-menu">
+  <div class="panel">
+    <h1>選單</h1>
+    <p class="sub">Project GO · 尖沙咀 3D</p>
+    <button id="pause-resume" class="qc-btn menu-start">繼續遊戲</button>
+    <button id="pause-settings" class="qc-btn secondary menu-start">設定</button>
+    <div class="menu-controls">
+      <h2>操作說明</h2>
+      <p><span class="touch-help">左搖桿移動 · 拖曳轉鏡頭 · 開車／騎車：搖桿上推加速、左右轉向</span><span class="kb-help">WASD 移動 · E 坐下 · F 上車／騎車 · T 喝水 · H 收起介面 · Esc 選單</span></p>
+    </div>
+    <button id="pause-restart" class="qc-btn secondary menu-start">重新開始</button>
+    <p class="note">地圖資料：香港特區政府地政總署 · 3D-BIT00 · CSDI</p>
+  </div>
+</div>
+<div id="settings-menu">
+  <div class="panel">
+    <h1>設定</h1>
+    <p class="sub">Project GO · 尖沙咀 3D</p>
+    <p class="menu-section">角色選擇</p>
+    <ul class="menu-list">
+      <!-- 加角色：加一項 <li>，再在 JS 接選擇邏輯 -->
+      <li>✓ <span class="label">Bryce</span>——當前角色</li>
+    </ul>
+    <p class="set-soon">更多角色即將推出</p>
+    <p class="menu-section">打扮</p>
+    <div class="set-swatch-row"><span class="set-swatch-label">上衣</span>
+      <button class="swatch" data-part="shirt" data-color="0xffffff" style="background:#ffffff" title="白"></button>
+      <button class="swatch" data-part="shirt" data-color="0x3a3a3a" style="background:#3a3a3a" title="黑"></button>
+      <button class="swatch" data-part="shirt" data-color="0xc0392b" style="background:#c0392b" title="紅"></button>
+      <button class="swatch" data-part="shirt" data-color="0x2e6fd8" style="background:#2e6fd8" title="藍"></button>
+    </div>
+    <div class="set-swatch-row"><span class="set-swatch-label">下身</span>
+      <button class="swatch" data-part="shorts" data-color="0x8a8a8a" style="background:#8a8a8a" title="灰"></button>
+      <button class="swatch" data-part="shorts" data-color="0x3a3a3a" style="background:#3a3a3a" title="黑"></button>
+      <button class="swatch" data-part="shorts" data-color="0x2e6fd8" style="background:#2e6fd8" title="藍"></button>
+      <button class="swatch" data-part="shorts" data-color="0xc9b18a" style="background:#c9b18a" title="卡其"></button>
+    </div>
+    <p class="set-soon">換裝只在本次遊戲生效（重新載入後恢復原樣）</p>
+    <div id="set-room-section">
+    <p class="menu-section">個人房間</p>
+    <button id="set-room" class="qc-btn">進入個人房間</button>
+    </div>
+    <p class="menu-section">畫面</p>
+    <button id="set-shadow" class="qc-btn set-row">光影<span class="set-val">開</span></button>
+    <button id="set-night" class="qc-btn set-row">夜間<span class="set-val">關</span></button>
+    <button id="set-nav" class="qc-btn set-row">導航模式<span class="set-val">開</span></button>
+    <button id="set-reset" class="qc-btn">重置視角</button>
+    <button id="set-pick" class="qc-btn">選擇 .glb 檔案</button>
+    <button id="settings-back" class="qc-btn secondary menu-start">返回</button>
+  </div>
+</div>
+<div id="quality-choice">
+  <div class="panel">
+    <h1>Project GO</h1>
+    <p class="sub">尖沙咀 3D · 選擇畫質</p>
+    <button id="qc-lite" class="qc-btn">輕量 Lite<span class="qc-tag">建議</span>
+      <span class="qc-desc">37MB · 載入快、省記憶體</span>
+    </button>
+    <button id="qc-full" class="qc-btn secondary">高畫質 Full
+      <span class="qc-desc">66MB · 畫質最好</span>
+      <span class="qc-warn">需要高效能電腦，手機／低階裝置不要選</span>
+    </button>
+    <p class="note">選擇後開始載入地圖</p>
+    <p class="note">地圖資料：香港特區政府地政總署 · 三維空間數據 3D-BIT00 · 經空間數據共享平台（CSDI）</p>
+  </div>
+</div>
 
 <script type="importmap">
 {
@@ -136,6 +364,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const app = document.getElementById('app');
 const metaEl = document.getElementById('meta');
@@ -148,9 +377,10 @@ const dropHint = document.getElementById('drop-hint');
 
 // ---------- renderer / scene ----------
 // Mobile (touch / narrow screen) gets the lite treatment: no antialias,
-// pixel ratio 1, shadows off by default, and the lite map (see entry
-// below). The full map's textures need ~1.9GB of GPU memory, which
-// kills phone browsers; the lite map (256²) needs ~360MB.
+// pixel ratio 1, shadows off by default, and no mipmaps (see onLoaded).
+// The full map's textures need ~1.9GB of GPU memory, which kills phone
+// browsers; the lite map (256²) needs ~360MB. Map quality itself is the
+// player's choice up front (see the entry block below).
 const isMobile = matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
 const renderer = new THREE.WebGLRenderer({ antialias: !isMobile });
 renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 1.5));
@@ -197,7 +427,7 @@ let recenterDone = false;
 // ---------- mode: 'walk' (third-person) or 'fly' (orbit + WASD) ----------
 // Default is fly: the page opens on the aerial view; switch to walk
 // to drop the character in.
-let mode = 'fly';
+let mode = 'walk';
 
 function setStatus(text, isError) {
   statusEl.textContent = text;
@@ -694,6 +924,317 @@ function groundHeight(x, z, refY) {
   return h;
 }
 
+// ---------- roads + building collision (baked data, loaded async) ----------
+// roads.json: 2m road-surface height grid rasterized from the government
+// road-network mesh (INFRASTRUCTURE(TB)) — the terrain DTM is too coarse
+// (~7m vertices in 4D) for smooth driving. buildings-collision.json: 2m
+// footprint grid of building walls at ground level (a cell is blocked
+// iff a wall passes through the ground band there). Both are baked in
+// scene coords for this map (2-tile TST). If the loaded model doesn't
+// match (a different .glb via ?model= or file picker), the data is
+// ignored; if the fetch fails (files not deployed yet), same fallback —
+// the page keeps working on terrain height with no collision.
+let roadGrid = null;  // {cell, originX, originZ, nx, nz, cover, heights}
+let footGrid = null;  // {cell, originX, originZ, nx, nz, bits}
+let roadDataRaw = null, footDataRaw = null, roadDataTried = false;
+let roadBlend = 0, lastRoadH = 0; // road/terrain blend for the car
+
+function b64ToBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function decodeRoadGrid(j) {
+  const cover = b64ToBytes(j.coverage);
+  const hb = b64ToBytes(j.heights);
+  const heights = new Float32Array(j.nx * j.nz).fill(NaN);
+  let k = 0;
+  for (let i = 0; i < j.nx * j.nz; i++) {
+    if (cover[i >> 3] & (1 << (i & 7))) {
+      heights[i] = (hb[k * 2] | (hb[k * 2 + 1] << 8)) * j.heightScale;
+      k++;
+    }
+  }
+  return { cell: j.cell, originX: j.originX, originZ: j.originZ,
+    nx: j.nx, nz: j.nz, cover, heights };
+}
+
+function decodeFootGrid(j) {
+  return { cell: j.cell, originX: j.originX, originZ: j.originZ,
+    nx: j.nx, nz: j.nz, bits: b64ToBytes(j.footprint) };
+}
+
+function tryActivateRoadData() {
+  if (!model || !roadDataRaw || !footDataRaw) return;
+  // baked for one map: the model centre must match (2m tolerance)
+  if (Math.abs(modelCenter.x - roadDataRaw.modelCenter.x) > 2 ||
+      Math.abs(modelCenter.z - roadDataRaw.modelCenter.z) > 2) {
+    roadGrid = null; footGrid = null;
+    return;
+  }
+  if (!roadGrid) roadGrid = decodeRoadGrid(roadDataRaw);
+  if (!footGrid) footGrid = decodeFootGrid(footDataRaw);
+}
+
+function loadRoadData() {
+  if (roadDataTried) { tryActivateRoadData(); return; }
+  roadDataTried = true;
+  Promise.all([
+    fetch('./roads.json').then((r) => { if (!r.ok) throw new Error('roads.json ' + r.status); return r.json(); }),
+    fetch('./buildings-collision.json').then((r) => { if (!r.ok) throw new Error('buildings-collision.json ' + r.status); return r.json(); }),
+  ]).then(([rj, fj]) => {
+    roadDataRaw = rj; footDataRaw = fj;
+    tryActivateRoadData();
+  }).catch((e) => {
+    console.warn('road data not loaded, driving on terrain without collision:', e);
+  });
+}
+
+// Road-surface height at (x, z), or null if off-road. Bilinear over the
+// 2m grid; at road edges the available corners are averaged (weights
+// renormalized) so the edge doesn't read as a cliff.
+function roadHeight(x, z) {
+  if (!roadGrid) return null;
+  const g = roadGrid;
+  const fx = (x - g.originX) / g.cell - 0.5;
+  const fz = (z - g.originZ) / g.cell - 0.5;
+  const ix = Math.floor(fx), iz = Math.floor(fz);
+  const tx = fx - ix, tz = fz - iz;
+  const corners = [
+    [ix, iz, (1 - tx) * (1 - tz)], [ix + 1, iz, tx * (1 - tz)],
+    [ix, iz + 1, (1 - tx) * tz], [ix + 1, iz + 1, tx * tz],
+  ];
+  let sum = 0, wsum = 0;
+  for (const [cx, cz, w] of corners) {
+    if (cx < 0 || cx >= g.nx || cz < 0 || cz >= g.nz) continue;
+    const h = g.heights[cz * g.nx + cx];
+    if (Number.isNaN(h)) continue;
+    sum += h * w; wsum += w;
+  }
+  return wsum > 0 ? sum / wsum : null;
+}
+
+// Building footprint collision: push a circle (pos.xz, radius) out of
+// blocked 2m cells. Returns true if pushed. Sliding along walls comes
+// free: the push is along the normal to the closest point.
+function collideFootprint(pos, radius) {
+  if (!footGrid) return false;
+  const g = footGrid, c = g.cell;
+  let hit = false;
+  for (let iter = 0; iter < 3; iter++) {
+    let pushed = false;
+    const ix0 = Math.floor((pos.x - radius - g.originX) / c);
+    const ix1 = Math.floor((pos.x + radius - g.originX) / c);
+    const iz0 = Math.floor((pos.z - radius - g.originZ) / c);
+    const iz1 = Math.floor((pos.z + radius - g.originZ) / c);
+    for (let iz = iz0; iz <= iz1; iz++) {
+      if (iz < 0 || iz >= g.nz) continue;
+      for (let ix = ix0; ix <= ix1; ix++) {
+        if (ix < 0 || ix >= g.nx) continue;
+        const idx = iz * g.nx + ix;
+        if (!(g.bits[idx >> 3] & (1 << (idx & 7)))) continue;
+        const x0 = g.originX + ix * c, x1 = x0 + c;
+        const z0 = g.originZ + iz * c, z1 = z0 + c;
+        const cx = Math.max(x0, Math.min(pos.x, x1));
+        const cz = Math.max(z0, Math.min(pos.z, z1));
+        const dx = pos.x - cx, dz = pos.z - cz;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= radius * radius) continue;
+        if (d2 > 1e-9) {
+          const d = Math.sqrt(d2);
+          pos.x = cx + dx / d * radius;
+          pos.z = cz + dz / d * radius;
+        } else {
+          // centre inside the cell: push out the nearest face
+          const pl = pos.x - (x0 - radius), pr = (x1 + radius) - pos.x;
+          const pn = pos.z - (z0 - radius), ps = (z1 + radius) - pos.z;
+          const m = Math.min(pl, pr, pn, ps);
+          if (m === pl) pos.x = x0 - radius;
+          else if (m === pr) pos.x = x1 + radius;
+          else if (m === pn) pos.z = z0 - radius;
+          else pos.z = z1 + radius;
+        }
+        hit = true; pushed = true;
+      }
+    }
+    if (!pushed) break;
+  }
+  return hit;
+}
+
+// Car collision: two circles at the axles (the car is 4.5m long, one
+// circle can't cover it). A push stops the car dead (v1: no bounce).
+function collideCar() {
+  if (!footGrid || !car) return;
+  const s = Math.sin(car.yaw), c = Math.cos(car.yaw);
+  let hit = false;
+  for (let iter = 0; iter < 2; iter++) {
+    let pushed = false;
+    for (const az of [1.45, -1.45]) {
+      const ax = car.pos.x + az * s, azw = car.pos.z + az * c;
+      const p = { x: ax, z: azw };
+      if (collideFootprint(p, 1.25)) {
+        car.pos.x += p.x - ax;
+        car.pos.z += p.z - azw;
+        hit = true; pushed = true;
+      }
+    }
+    if (!pushed) break;
+  }
+  if (hit) car.speed = 0;
+}
+
+// ---------- camera collision (buildings-aabb.json) ----------
+// The demo had no camera collision: the camera clipped through
+// buildings and walls, and the low driving camera made it worse.
+// This pulls the camera back along its sight line so it stops just
+// before the nearest building, and clamps it above the terrain.
+//
+// Data: buildings-aabb.json — the 460 audit bboxes (problems-v2.json),
+// raw glb coordinates, 2 decimals. Same frame as the audit, verified
+// against the footprint grid: 448/460 buildings overlap blocked cells
+// under scene = raw - modelCenter (the 12 exceptions are hillside
+// buildings above the grid's ground band + 2 podium towers, all
+// explained — see patch.md). At activation the boxes are transformed
+// once into scene coords (x/z minus modelCenter, y plus
+// model.position.y, the frameModel shift).
+//
+// Activation mirrors the road data: the model centre must match the
+// baked values within 2m, else the system silently disables itself
+// (different .glb via ?model=, or the JSON not deployed yet) and the
+// cameras behave exactly as they do today. The fetch is deliberately
+// separate from loadRoadData's Promise.all — a missing
+// buildings-aabb.json must not break roads or footprint collision.
+//
+// Performance: 460 slab tests per frame is ~10k flops — negligible
+// next to the render loop. No caching: the camera lerps every frame
+// while driving/riding, so a "did the camera move" check would almost
+// never skip, and stale-state bugs aren't worth saving microseconds.
+//
+// Scope: walk camera, driving chase cam, bike chase cam. NOT the room
+// camera (indoor, already clamped) or fly-mode OrbitControls.
+let camBoxes = null;      // Float32Array, scene coords, 6 numbers per box
+let camBoxesRaw = null;   // parsed JSON (raw coords) until activated
+let camBoxesTried = false;
+
+const CAM_MARGIN = 0.3;   // stop this far before a wall (m)
+const CAM_MIN_DIST = 1.0; // never closer than this to the target point (m)
+
+function tryActivateCamBoxes() {
+  if (!model || !camBoxesRaw) return;
+  // baked for one map: centre must match (2m tolerance, same as roads)
+  // — plus the Y shift, which also catches a ?model= reload
+  if (Math.abs(modelCenter.x - camBoxesRaw.modelCenter.x) > 2 ||
+      Math.abs(modelCenter.z - camBoxesRaw.modelCenter.z) > 2 ||
+      Math.abs(model.position.y + camBoxesRaw.modelMinY) > 2) {
+    camBoxes = null;
+    return;
+  }
+  // transform once, raw -> scene: x/z minus the centre, y plus the
+  // frameModel shift (model.position.y = -box.min.y)
+  const raw = camBoxesRaw.boxes;
+  const out = new Float32Array(raw.length * 6);
+  for (let i = 0; i < raw.length; i++) {
+    const b = raw[i], o = i * 6;
+    out[o] = b[0] - modelCenter.x;
+    out[o + 1] = b[1] + model.position.y;
+    out[o + 2] = b[2] - modelCenter.z;
+    out[o + 3] = b[3] - modelCenter.x;
+    out[o + 4] = b[4] + model.position.y;
+    out[o + 5] = b[5] - modelCenter.z;
+  }
+  camBoxes = out;
+}
+
+function loadCamAABBs() {
+  if (camBoxesTried) { tryActivateCamBoxes(); return; }
+  camBoxesTried = true;
+  fetch('./buildings-aabb.json')
+    .then((r) => { if (!r.ok) throw new Error('buildings-aabb.json ' + r.status); return r.json(); })
+    .then((j) => { camBoxesRaw = j; tryActivateCamBoxes(); })
+    .catch((e) => { console.warn('camera collision data not loaded, cameras unclamped:', e); });
+}
+
+// -- pure math (also exercised by test-camera.mjs; keep in sync) --
+// Slab test: earliest t in [0,1] where the segment o + t*d enters the
+// box at boxes[i..i+5] ([minX,minY,minZ,maxX,maxY,maxZ]), or Infinity
+// if it never enters. A segment starting inside the box returns 0 —
+// callers must ignore t <= 0 (the camera target is inside a building;
+// there is no "before the wall" to pull back to).
+function segmentBoxT(ox, oy, oz, dx, dy, dz, boxes, i) {
+  let tmin = 0, tmax = 1;
+  // X slab
+  if (dx === 0) {
+    if (ox < boxes[i] || ox > boxes[i + 3]) return Infinity;
+  } else {
+    let t1 = (boxes[i] - ox) / dx, t2 = (boxes[i + 3] - ox) / dx;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return Infinity;
+  }
+  // Y slab
+  if (dy === 0) {
+    if (oy < boxes[i + 1] || oy > boxes[i + 4]) return Infinity;
+  } else {
+    let t1 = (boxes[i + 1] - oy) / dy, t2 = (boxes[i + 4] - oy) / dy;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return Infinity;
+  }
+  // Z slab
+  if (dz === 0) {
+    if (oz < boxes[i + 2] || oz > boxes[i + 5]) return Infinity;
+  } else {
+    let t1 = (boxes[i + 2] - oz) / dz, t2 = (boxes[i + 5] - oz) / dz;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return Infinity;
+  }
+  return tmin;
+}
+// -- end pure math --
+
+// Pull `desired` back toward `target` so the camera stops just before
+// the nearest building on its sight line, and clamp it above the
+// terrain. Mutates `desired` in place; no-op when the data isn't
+// active (fetch failed / wrong model), leaving the cameras exactly as
+// they are today.
+function clampCameraToBuildings(target, desired) {
+  if (!camBoxes) return;
+  // (1) ground clamp first: never under the terrain. refY is the
+  // target height (the player's head), so rooftops above the player
+  // don't count as floor — the AABB test below handles buildings.
+  const gy = groundHeight(desired.x, desired.z, target.y);
+  if (desired.y < gy + 0.5) desired.y = gy + 0.5;
+  // (2) building AABBs: nearest box the sight line enters
+  const dx = desired.x - target.x;
+  const dy = desired.y - target.y;
+  const dz = desired.z - target.z;
+  const len = Math.hypot(dx, dy, dz);
+  if (len < 1e-6) return;
+  let best = Infinity;
+  for (let i = 0; i < camBoxes.length; i += 6) {
+    const t = segmentBoxT(target.x, target.y, target.z, dx, dy, dz, camBoxes, i);
+    if (t > 0 && t < best) best = t;
+  }
+  if (best === Infinity) return;
+  // stop CAM_MARGIN before the wall, but never closer than
+  // CAM_MIN_DIST to the target (backed-into-a-corner case: the wall is
+  // nearer than 1m, so the camera may still touch it — unavoidable
+  // without moving the target itself)
+  const stop = Math.max(CAM_MIN_DIST, best * len - CAM_MARGIN);
+  if (stop >= len) return;
+  const s = stop / len;
+  desired.x = target.x + dx * s;
+  desired.y = target.y + dy * s;
+  desired.z = target.z + dz * s;
+}
+
 // ---------- map boundary: fog-of-war walls + playable bounds ----------
 let bounds = null; // {minX, maxX, minZ, maxZ}, from the terrain heightfield
 let fogWalls = [];
@@ -766,6 +1307,14 @@ function showBoundaryToast() {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 3500);
 }
 
+// generic toast (first-time hint): any text, custom duration, no cooldown
+function showToast(text, ms) {
+  toastEl.textContent = text;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms || 3500);
+}
+
 function clampToBounds() {
   if (!bounds) return;
   let hit = false;
@@ -795,8 +1344,10 @@ const COMPASS = ['北', '東北', '東', '東南', '南', '西南', '西', '西�
 function updateNavHud(dt) {
   if (!navMode || mode !== 'walk' || !model) { navHud.style.display = 'none'; return; }
   navHud.style.display = 'block';
-  // speed: distance moved per second -> km/h, smoothed
-  const dist = charPos.distanceTo(_prevPos);
+  // speed: horizontal distance moved per second -> km/h, smoothed
+  // (horizontal only: the old 3D distance counted every ground-height
+  // snap as speed)
+  const dist = Math.hypot(charPos.x - _prevPos.x, charPos.z - _prevPos.z);
   _prevPos.copy(charPos);
   const kmh = dt > 0 ? (dist / dt) * 3.6 : 0;
   smoothKmh += (kmh - smoothKmh) * Math.min(1, dt * 6);
@@ -809,22 +1360,20 @@ function updateNavHud(dt) {
   const rawX = charPos.x + modelCenter.x;
   const rawZ = charPos.z + modelCenter.z;
   let area = '尖沙咀';
-  if (Math.abs(rawX - (-266)) < 40 && Math.abs(rawZ) < 200) area = '廣東道';
+  if (inRoom) area = '個人房間';
+  else if (Math.abs(rawX - (-266)) < 40 && Math.abs(rawZ) < 200) area = '廣東道';
   else if (rawZ > 300) area = '尖沙咀海濱';
   navNavEl.textContent = area + ' · ' + compass;
 }
 
 function setNavMode(on) {
   navMode = on;
-  document.getElementById('navToggle').textContent = '導航模式：' + (on ? '開' : '關');
 }
-document.getElementById('navToggle').addEventListener('click', () => setNavMode(!navMode));
 
 // day / night lighting presets (textures are daytime photos, so night is a
 // dimmed mood, not true night photography)
 function setNightMode(on) {
   nightMode = on;
-  document.getElementById('nightToggle').textContent = '夜間：' + (on ? '開' : '關');
   if (on) {
     scene.background.set(0x0a0e1a);
     scene.fog.color.set(0x0a0e1a);
@@ -845,12 +1394,27 @@ function setNightMode(on) {
   // procedural outer city: lit windows glow at night
   for (const m of outerCityWinMats) m.emissiveIntensity = on ? 1.4 : 0.15;
 }
-document.getElementById('nightToggle').addEventListener('click', () => setNightMode(!nightMode));
 document.getElementById('punchBtn').addEventListener('click', () => startAction('punch'));
 document.getElementById('kickBtn').addEventListener('click', () => startAction('kick'));
 document.getElementById('comboBtn').addEventListener('click', () => startAction('combo'));
+document.getElementById('drinkBtn').addEventListener('click', () => drinkWater());
 
 function spawnCharacter() {
+  // resetting the view from inside the room: leave the room state
+  // (exitRoom already clears this; this covers the reset path)
+  if (inRoom) { inRoom = false; if (roomGroup) roomGroup.visible = false; }
+  // teleporting while seated would leave the character sitting in mid-air
+  if (sitState !== 'stand') cancelSit();
+  // same while driving: drop out of the car first
+  if (carState !== 'none') cancelCar();
+  // same while riding: get off the bike first
+  if (bikeState !== 'none') cancelBike();
+  // same while asleep: wake up first (no wake-up animation — just
+  // reset so the teleport can't leave the character lying mid-air)
+  if (sleepState !== 'awake') cancelSleep();
+  // a teleport is not a fall: drop any in-progress fall tracking
+  // (fallStartY lives in the food-stall section below)
+  fallStartY = null;
   const sx = SPAWN_RAW.x - modelCenter.x;
   const sz = SPAWN_RAW.z - modelCenter.z;
   charPos.set(sx, 0, sz);
@@ -876,13 +1440,13 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 window.addEventListener('pointermove', (e) => {
   if (!dragging || mode !== 'walk') return;
   camYaw -= (e.clientX - lastX) * 0.005;
-  camPitch = THREE.MathUtils.clamp(camPitch + (e.clientY - lastY) * 0.004, 0.08, 1.2);
+  camPitch = THREE.MathUtils.clamp(camPitch + (e.clientY - lastY) * 0.004, 0.08, inRoom ? 0.25 : 1.2);
   lastX = e.clientX; lastY = e.clientY;
 });
 window.addEventListener('pointerup', () => { dragging = false; });
 renderer.domElement.addEventListener('wheel', (e) => {
   if (mode !== 'walk') return;
-  camDist = THREE.MathUtils.clamp(camDist + e.deltaY * 0.01, 2, 40);
+  camDist = THREE.MathUtils.clamp(camDist + e.deltaY * 0.01, 2, inRoom ? 3.5 : 40);
 }, { passive: true });
 
 function updateWalkCamera() {
@@ -892,13 +1456,48 @@ function updateWalkCamera() {
     Math.sin(camPitch),
     Math.cos(camYaw) * Math.cos(camPitch)
   ).multiplyScalar(camDist);
-  camera.position.copy(target).add(off);
+  const desired = target.clone().add(off);
+  clampCameraToBuildings(target, desired);
+  // inside the room the distance/pitch clamps alone don't keep the
+  // camera in: the target sits 2.2m up, so max pitch + max distance
+  // already pokes through the 3m ceiling, and near a wall the camera
+  // swings outside it. Clamp the position to the room box instead
+  // (walls ±5.0/±4.0, ceiling underside at +3.0).
+  if (inRoom && roomCenter) {
+    desired.x = THREE.MathUtils.clamp(desired.x, roomCenter.x - 4.8, roomCenter.x + 4.8);
+    desired.y = THREE.MathUtils.clamp(desired.y, ROOM_Y + 0.5, ROOM_Y + 2.85);
+    desired.z = THREE.MathUtils.clamp(desired.z, roomCenter.z - 3.8, roomCenter.z + 3.8);
+  }
+  camera.position.copy(desired);
   camera.lookAt(target);
 }
 
 // ---------- mode switching ----------
+// first-time walk hint: shown once, the first time the player switches
+// to walk mode (see setMode); once per page load, no localStorage
+let walkHintShown = false;
 function setMode(m) {
+  // no flying inside the personal room
+  if (m === 'fly' && inRoom) { showToast('房間裡不能飛行', 2000); return; }
+  // switching modes while seated: stand back up first (the bench is a
+  // walk-mode thing; flying off while seated would freeze the pose)
+  if (sitState !== 'stand') cancelSit();
+  // same while driving: get out of the car first (no exit animation —
+  // just snap back to the ground so the mode switch can't get stuck)
+  if (carState !== 'none') cancelCar();
+  // same while riding: get off the bike first
+  if (bikeState !== 'none') cancelBike();
+  // same while asleep: wake up first (flying off while asleep would
+  // freeze the lying pose)
+  if (sleepState !== 'awake') cancelSleep();
   mode = m;
+  // first-time hint: name the two nearest interactions (car + bench)
+  if (m === 'walk' && !walkHintShown) {
+    walkHintShown = true;
+    showToast(isMobile
+      ? '走到車旁點「上車」開車，走到長椅點「坐下」休息'
+      : '走到車旁按 F 上車，走到長椅按 E 坐下', 5000);
+  }
   document.getElementById('modeToggle').textContent = '模式：' + (mode === 'walk' ? '步行' : '飛行');
   controls.enabled = (mode === 'fly');
   if (mode === 'walk' && model) updateWalkCamera();
@@ -919,6 +1518,27 @@ function onLoaded(gltf, name) {
   model.traverse((o) => {
     if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
   });
+  // Mobile: no mipmaps. Mipmaps cost +33% GPU texture memory and iOS
+  // kills the tab; on a phone screen the shimmer is barely visible.
+  if (isMobile) {
+    const seen = new Set();
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (!m) continue;
+        for (const key of Object.keys(m)) {
+          const v = m[key];
+          if (v && v.isTexture && !seen.has(v)) {
+            seen.add(v);
+            v.minFilter = THREE.LinearFilter;
+            v.generateMipmaps = false;
+            v.needsUpdate = true;
+          }
+        }
+      }
+    });
+  }
   scene.add(model);
   recenterDone = false;
   frameModel();
@@ -928,13 +1548,39 @@ function onLoaded(gltf, name) {
   buildOuterCity();
   createFerry();
   spawnCharacter();
+  createBench();
+  createCar();
+  createBike();
+  createStall();
+  createRoom();
+  createBed();
+  createPet();
+  createPierDeck();
+  // road + collision data is baked for this map: reset on every load
+  // (a different .glb must not inherit the old map's data), then
+  // (re)activate if the model matches
+  roadGrid = null; footGrid = null;
+  camBoxes = null;
+  loadRoadData();
+  loadCamAABBs();
   setMode(mode); // apply the current mode to the fresh model
+  // Bryce loads only after the map is done, on all devices: on mobile
+  // the two big .glb parses must not spike memory at the same time
+  // (iOS kills the tab), and on desktop the 59MB download should not
+  // start before the user has even picked a quality.
+  // NOTE: check `bryce` itself, not `bryce.group` — bryce is still null
+  // here (that's the whole point of deferring), and reading
+  // .group off null throws "null is not an object" on iPhone Safari.
+  if (!bryce) loadBryce();
 }
 
 function onError(err) {
   console.error(err);
   setStatus('載入失敗：' + (err && err.message ? err.message : err), true);
   barWrap.style.display = 'none';
+  // the error lives in #hud — if the UI is collapsed (mobile default),
+  // expand it so the failure is actually visible instead of silent
+  setUICollapsed(false);
 }
 
 function loadFromUrl(url, name) {
@@ -946,6 +1592,12 @@ function loadFromUrl(url, name) {
 }
 
 function loadFromFile(file) {
+  // a file dropped before picking a quality: don't leave the map
+  // loading behind the choice overlay
+  const qc = document.getElementById('quality-choice');
+  if (qc) qc.style.display = 'none';
+  const mm = document.getElementById('main-menu');
+  if (mm) mm.style.display = 'none';
   setStatus('讀取檔案：' + file.name);
   showProgress(0.5);
   const reader = new FileReader();
@@ -958,17 +1610,14 @@ function loadFromFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
-// ---------- entry: ?model= URL, else default .glb, else picker ----------
-// Mobile loads the lite map (256² textures) when it exists in the repo,
-// falling back to the full map if the lite file isn't there yet.
+// ---------- entry: ?model= URL, else main menu -> quality choice, else picker ----------
+// Full (512² textures, ~1.9GB GPU memory) is too heavy for most devices,
+// not just phones, so the player picks Lite or Full up front; Lite is the
+// recommended default. Lite tries the ultra-lite map (128²) first when
+// it exists in the repo, then lite (256²), then full.
 const params = new URLSearchParams(location.search);
 const modelParam = params.get('model');
-if (modelParam) {
-  loadFromUrl(modelParam, modelParam.split('/').pop());
-} else {
-  const candidates = isMobile
-    ? ['./full_tst_tile_lite.glb', './full_tst_tile.glb']
-    : ['./full_tst_tile.glb'];
+function tryCandidates(candidates) {
   (function tryNext(i) {
     if (i >= candidates.length) { setStatus('尚未載入模型，請選擇 full_tst_tile.glb'); return; }
     fetch(candidates[i], { method: 'HEAD' }).then((r) => {
@@ -977,12 +1626,36 @@ if (modelParam) {
     }).catch(() => tryNext(i + 1));
   })(0);
 }
+const choiceEl = document.getElementById('quality-choice');
+const mainMenuEl = document.getElementById('main-menu');
+if (modelParam) {
+  // direct load: skip the main menu AND the quality choice
+  mainMenuEl.style.display = 'none';
+  choiceEl.style.display = 'none';
+  loadFromUrl(modelParam, modelParam.split('/').pop());
+} else {
+  setStatus('請選擇畫質：Lite 或 Full');
+  // main menu first: start -> quality choice -> load
+  document.getElementById('menu-start').addEventListener('click', () => {
+    mainMenuEl.style.display = 'none';
+    choiceEl.style.display = 'flex';
+  });
+  document.getElementById('qc-lite').addEventListener('click', () => {
+    choiceEl.style.display = 'none';
+    tryCandidates(['./full_tst_tile_ulite.glb', './full_tst_tile_lite.glb', './full_tst_tile.glb']);
+  });
+  document.getElementById('qc-full').addEventListener('click', () => {
+    choiceEl.style.display = 'none';
+    tryCandidates(['./full_tst_tile.glb']);
+  });
+}
 
-// rigged character (loads in parallel; the procedural one is the fallback)
-loadBryce();
+// rigged character: loaded in onLoaded, after the map is done
+// (see there) — never before the user picks a quality.
 
 // ---------- file picker + drag & drop ----------
-document.getElementById('pick').addEventListener('click', () => fileInput.click());
+// (the file picker button lives in the settings screen now — the HUD
+// shortcut was removed 2026-11-23 to declutter the HUD)
 fileInput.addEventListener('change', () => {
   if (fileInput.files[0]) loadFromFile(fileInput.files[0]);
   fileInput.value = '';
@@ -996,22 +1669,38 @@ window.addEventListener('drop', (e) => {
   if (f) loadFromFile(f);
 });
 
-document.getElementById('reset').addEventListener('click', () => {
+// reset view: settings screen button (the HUD shortcut was removed
+// 2026-11-23 to declutter the HUD). Inside the room it resets to the
+// room centre — it must NOT teleport the player back to the plaza
+// (spawnCharacter clears inRoom, so the room case stays separate).
+function resetView() {
   if (!model) return;
+  if (inRoom && roomCenter) {
+    charPos.set(roomCenter.x, ROOM_Y, roomCenter.z);
+    charYaw = Math.PI; // face north (window), same as entering
+    charGroup.position.copy(charPos);
+    charGroup.rotation.y = charYaw;
+    if (bryce) { bryce.group.position.copy(charPos); bryce.group.rotation.y = charYaw; }
+    _prevPos.copy(charPos);
+    camYaw = 0;
+    camPitch = 0.2;
+    camDist = 3;
+    updateWalkCamera();
+    return;
+  }
   if (mode === 'walk') spawnCharacter();
   else frameModel();
-});
+}
 
-// shadow on/off (helps diagnose fill-rate / GPU bottlenecks)
+// shadow on/off (helps diagnose fill-rate / GPU bottlenecks). Toggled
+// from the settings screen (the HUD shortcut was removed 2026-11-23).
 let shadowsOn = !isMobile;
-document.getElementById('shadowToggle').textContent = '陰影：' + (shadowsOn ? '開' : '關');
-document.getElementById('shadowToggle').addEventListener('click', () => {
-  shadowsOn = !shadowsOn;
+function setShadows(on) {
+  shadowsOn = on;
   renderer.shadowMap.enabled = shadowsOn;
   sun.castShadow = shadowsOn;
   scene.traverse((o) => { if (o.isMesh && o.material) o.material.needsUpdate = true; });
-  document.getElementById('shadowToggle').textContent = '陰影：' + (shadowsOn ? '開' : '關');
-});
+}
 
 // which GPU is the browser actually using? (dual-GPU laptops often run
 // Chrome on the integrated GPU, which is the #1 cause of low FPS here)
@@ -1033,6 +1722,7 @@ let ferry = null;
 
 function createFerry() {
   if (ferry) scene.remove(ferry.group);
+  if (ferry && ferry.wake) scene.remove(ferry.wake);
   const g = new THREE.Group();
   const mat = (c, r = 0.6) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
   const green = mat(0x1f6b3a), white = mat(0xe8e8e8), dark = mat(0x1c2733, 0.3), black = mat(0x1a1a1a);
@@ -1062,9 +1752,34 @@ function createFerry() {
   const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3, 6), black);
   mast.position.set(0, 10.5, 6); g.add(mast);
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  // wake: a flat foam trail on the water behind the stern. Scene-level
+  // (not a child of the group) so it stays flat while the ferry bobs.
+  const wc = document.createElement('canvas'); wc.width = 128; wc.height = 256;
+  const wctx = wc.getContext('2d');
+  // Bright at the canvas bottom (v=0 = the end nearest the ferry after
+  // the flat rotation), fading along the trail.
+  const vg = wctx.createLinearGradient(0, 256, 0, 0);
+  vg.addColorStop(0, 'rgba(255,255,255,0.9)');
+  vg.addColorStop(0.5, 'rgba(255,255,255,0.35)');
+  vg.addColorStop(1, 'rgba(255,255,255,0)');
+  wctx.fillStyle = vg; wctx.fillRect(0, 0, 128, 256);
+  wctx.globalCompositeOperation = 'destination-in';
+  const hg = wctx.createLinearGradient(0, 0, 128, 0);
+  hg.addColorStop(0, 'rgba(255,255,255,0)');
+  hg.addColorStop(0.25, 'rgba(255,255,255,1)');
+  hg.addColorStop(0.75, 'rgba(255,255,255,1)');
+  hg.addColorStop(1, 'rgba(255,255,255,0)');
+  wctx.fillStyle = hg; wctx.fillRect(0, 0, 128, 256);
+  const wakeMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(wc), transparent: true, opacity: 0, depthWrite: false });
+  const wakeGeo = new THREE.PlaneGeometry(12, 50);
+  wakeGeo.rotateX(-Math.PI / 2);
+  const wake = new THREE.Mesh(wakeGeo, wakeMat);
+  wake.position.y = 1.56; // just above the water plane (y=1.5)
+  wake.visible = false;
+  scene.add(wake);
   const sz = modelSize.z;
   ferry = {
-    group: g, x: 270, zTST: sz / 2 - 280, zCEN: sz / 2 + 660,
+    group: g, wake, wakeMat, x: 270, zTST: sz / 2 - 280, zCEN: sz / 2 + 660,
     s: 0, dir: 1, dwell: 3, yaw: 0
   };
   g.position.set(270, 1.35, ferry.zTST);
@@ -1075,6 +1790,7 @@ function updateFerry(dt, t) {
   if (!ferry) return;
   const f = ferry;
   const routeLen = f.zCEN - f.zTST;
+  let speed = 0; // 0 while dwelling at a pier
   if (f.dwell > 0) {
     f.dwell -= dt;
     // turn around smoothly during the dwell
@@ -1088,7 +1804,7 @@ function updateFerry(dt, t) {
     // ease speed near the piers (slow within 150m of either end)
     const z = f.zTST + f.s * routeLen;
     const distEnd = f.dir > 0 ? f.zCEN - z : z - f.zTST;
-    const speed = 15 * Math.min(1, Math.max(0.15, distEnd / 150));
+    speed = 15 * Math.min(1, Math.max(0.15, distEnd / 150));
     f.s += f.dir * speed * dt / routeLen;
     if (f.s >= 1) { f.s = 1; f.dir = -1; f.dwell = 5; }
     if (f.s <= 0) { f.s = 0; f.dir = 1; f.dwell = 5; }
@@ -1098,7 +1814,30 @@ function updateFerry(dt, t) {
   f.group.rotation.y = f.yaw;
   f.group.rotation.z = Math.sin(t * 0.5) * 0.01;
   f.group.rotation.x = Math.sin(t * 0.6 + 1) * 0.008;
+  // wake trails 40m behind the stern, flat on the water; fades with speed
+  const fwdX = Math.sin(f.yaw), fwdZ = Math.cos(f.yaw);
+  f.wake.position.set(f.x - fwdX * 40, 1.56, z - fwdZ * 40);
+  f.wake.rotation.y = f.yaw;
+  const wakeTarget = 0.5 * (speed / 15);
+  f.wakeMat.opacity += (wakeTarget - f.wakeMat.opacity) * Math.min(1, dt * 2);
+  f.wake.visible = f.wakeMat.opacity > 0.01;
 }
+
+// ---------- UI collapse ----------
+// The HUD panel (title, stats, status, buttons) and the help line can be
+// hidden for a clean view; nav HUD, touch controls, prompts and toast stay.
+// Mobile defaults to collapsed (small screen); desktop defaults to expanded.
+// Collapsing only hides elements — keyboard controls and button handlers
+// keep working, and labels update normally while hidden.
+let uiCollapsed = false;
+const uiToggleBtn = document.getElementById('uiToggle');
+function setUICollapsed(c) {
+  uiCollapsed = c;
+  document.body.classList.toggle('ui-collapsed', c);
+  uiToggleBtn.textContent = c ? '☰' : '✕';
+}
+uiToggleBtn.addEventListener('click', () => setUICollapsed(!uiCollapsed));
+setUICollapsed(isMobile);
 
 // ---------- input + animation ----------
 const keys = {};
@@ -1110,9 +1849,148 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyJ') startAction('punch');
     else if (e.code === 'KeyK') startAction('kick');
     else if (e.code === 'KeyL') startAction('combo');
+    else if (e.code === 'KeyE') tryInteract(); // E is contextual: nearest in-range interaction wins (bench / stall / bed); already asleep or seated exits first
+    else if (e.code === 'KeyF') toggleVehicle();
+    else if (e.code === 'KeyT') drinkWater();
+    else if (e.code === 'KeyH') setUICollapsed(!uiCollapsed);
+    else if (e.code === 'Escape') { if (settingsOpen) closeSettings(); else setPauseMenu(!pauseOpen); }
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+// a clicked button keeps keyboard focus, which can swallow later
+// keypresses (2026-11-23 browser test: A/D stopped working after
+// clicking a HUD button until the canvas was clicked again). Drop
+// focus right after any button click — the game reads keys from
+// the window, not from focused controls.
+document.addEventListener('click', (e) => {
+  const b = e.target && e.target.closest ? e.target.closest('button') : null;
+  if (b) b.blur();
+});
+
+// ---------- in-game menu (Esc / 選單 button) ----------
+// v1 does not pause the render loop (the ferry keeps sailing): the
+// overlay covers the screen and blocks game input, and with no input
+// the character just stands still.
+const pauseMenuEl = document.getElementById('pause-menu');
+let pauseOpen = false;
+function setPauseMenu(open) {
+  if (open) {
+    // never open over the start screens (main menu / quality choice)
+    if (getComputedStyle(mainMenuEl).display !== 'none' ||
+        getComputedStyle(choiceEl).display !== 'none') return;
+    for (const k in keys) keys[k] = false; // stop any held movement
+  }
+  pauseOpen = open;
+  pauseMenuEl.style.display = open ? 'flex' : 'none';
+}
+document.getElementById('pause-resume').addEventListener('click', () => setPauseMenu(false));
+document.getElementById('pause-restart').addEventListener('click', () => location.reload());
+document.getElementById('menuBtn').addEventListener('click', () => setPauseMenu(!pauseOpen));
+
+// ---------- settings screen ----------
+// Opened from the pause menu only (in-game, z 32, above it); the back
+// button (or Esc) returns to the pause menu. Pre-game settings were
+// removed 2026-11-23 (user: nothing in here is usable before the game
+// starts) — the main menu has no 設定 button any more. The three
+// toggles share one state variable each with the HUD buttons (shadowsOn
+// / nightMode / navMode): toggling here calls the same setters, so the
+// HUD text updates at once; opening the screen re-reads the variables,
+// so HUD toggles made while it was closed show up correctly.
+const settingsMenuEl = document.getElementById('settings-menu');
+let settingsOpen = false;
+function syncSettingsUI() {
+  document.querySelector('#set-shadow .set-val').textContent = shadowsOn ? '開' : '關';
+  document.querySelector('#set-night .set-val').textContent = nightMode ? '開' : '關';
+  document.querySelector('#set-nav .set-val').textContent = navMode ? '開' : '關';
+  syncRoomButton();
+  syncDressUpUI();
+}
+function openSettings() {
+  setPauseMenu(false);
+  syncSettingsUI();
+  settingsOpen = true;
+  settingsMenuEl.style.display = 'flex';
+}
+function closeSettings() {
+  settingsOpen = false;
+  settingsMenuEl.style.display = 'none';
+  setPauseMenu(true);
+}
+document.getElementById('pause-settings').addEventListener('click', () => openSettings());
+document.getElementById('settings-back').addEventListener('click', closeSettings);
+document.getElementById('set-shadow').addEventListener('click', () => { setShadows(!shadowsOn); syncSettingsUI(); });
+document.getElementById('set-night').addEventListener('click', () => { setNightMode(!nightMode); syncSettingsUI(); });
+document.getElementById('set-nav').addEventListener('click', () => { setNavMode(!navMode); syncSettingsUI(); });
+document.getElementById('set-reset').addEventListener('click', resetView);
+document.getElementById('set-pick').addEventListener('click', () => fileInput.click());
+
+// ---------- dress-up (settings) — PATCH FRAGMENT, not a module ----------
+// Paste into harbour-city-demo.html's module script, AFTER the
+// settings-screen listeners (see patch.md step D1). References the main
+// file's globals (bryce, showToast) and the .swatch buttons added to
+// #settings-menu (patch.md step D2).
+//
+// .glb facts (verified from bryce_animated.glb JSON, see
+// glb-inspection.md): 2 materials total — Ch42_Hair (hair + eyelashes)
+// and Ch42_Body (body + shirt + shorts + sneakers). Shirt and Shorts
+// SHARE Ch42_Body with the body, so each mesh's material must be cloned
+// once before tinting, or the whole body changes color.
+// Mesh node names: Ch42_Shirt, Ch42_Shorts (getObjectByName on
+// bryce.group). Tinting drops the texture map (map = null) and sets a
+// flat colour: the shirt texture is red, so a multiply tint could never
+// produce the chosen colour. Reload restores the original textured look.
+// In-memory only: no persistence — a page reload restores the original
+// look (noted in the settings screen itself).
+
+// null = no tint picked yet: Bryce keeps his original textured look
+// (red shirt, blue jeans). A tint only applies after the user picks a
+// swatch — previously these defaulted to 0xffffff and loadBryce's
+// re-apply call tinted Bryce flat white on every load (VM check
+// 2026-11-23: Bryce spawned white/grey instead of red/blue).
+let shirtTint = null;
+let shortsTint = null;
+
+function tintBryceMesh(nodeName, hex) {
+  if (!bryce) return false;
+  const mesh = bryce.group.getObjectByName(nodeName);
+  if (!mesh || !mesh.isMesh || Array.isArray(mesh.material)) return false;
+  // clone once per mesh (see header: the material is shared with Body)
+  if (!mesh.material.userData.dressupCloned) {
+    mesh.material = mesh.material.clone();
+    mesh.material.userData.dressupCloned = true;
+    // the shirt/shorts textures are coloured (Bryce's shirt is red), so
+    // a multiply tint can never produce the chosen colour (red x blue
+    // can't make blue) — drop the map so the colour shows true (flat)
+    mesh.material.map = null;
+    mesh.material.needsUpdate = true;
+  }
+  mesh.material.color.set(hex);
+  return true;
+}
+
+function applyDressUp() {
+  if (!bryce) return;
+  if (shirtTint !== null) tintBryceMesh('Ch42_Shirt', shirtTint);
+  if (shortsTint !== null) tintBryceMesh('Ch42_Shorts', shortsTint);
+}
+
+function syncDressUpUI() {
+  document.querySelectorAll('.swatch').forEach((b) => {
+    const want = b.dataset.part === 'shirt' ? shirtTint : shortsTint;
+    b.classList.toggle('active', Number(b.dataset.color) === want);
+  });
+}
+
+document.querySelectorAll('.swatch').forEach((b) => {
+  b.addEventListener('click', () => {
+    if (!bryce) { showToast('角色尚未載入', 2000); return; }
+    const hex = Number(b.dataset.color);
+    if (b.dataset.part === 'shirt') shirtTint = hex;
+    else shortsTint = hex;
+    applyDressUp();
+    syncDressUpUI();
+  });
+});
 
 // ---------- touch controls (mobile) ----------
 // Virtual joystick (bottom-left) moves the character; drag anywhere else
@@ -1180,6 +2058,10 @@ const MOVES = {
 let action = null; // { name, t0 }
 function startAction(name) {
   if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return; // no martial arts while sitting down
+  if (carState !== 'none') return; // no martial arts while in the car
+  if (bikeState !== 'none') return; // no martial arts while riding
+  if (sleepState !== 'awake') return; // no martial arts while asleep
   // rigged character: play the Mixamo clip instead of the procedural pose
   if (bryce) {
     if (name === 'punch') playOneShot('Punching');
@@ -1221,9 +2103,8 @@ function actionPose(now) {
 // Replaces the procedural character once loaded; the procedural one
 // stays as a fallback if the file is missing (e.g. before it is pushed
 // to the repo). Clips: Idle/Walking/Running (locomotion), Punching/
-// Kicking (martial arts). Entering Car/Exiting Car/Driving/Sitting/
-// Sitting Idle/Stand Up/Drinking are loaded too, wired in later phases
-// (no car or chairs exist yet).
+// Kicking (martial arts, J/K/L), Entering Car/Exiting Car/Driving
+// (car, F), Sitting/Sitting Idle/Stand Up (bench, E), Drinking (T).
 let bryce = null; // { group, mixer, clips, loco, oneShot, current }
 function loadBryce() {
   loader.load('./bryce_animated.glb', (g) => {
@@ -1236,6 +2117,8 @@ function loadBryce() {
     scene.add(group);
     charGroup.visible = false; // procedural character stands down
     playLoco('Idle');
+    spawnNpcs();
+    applyDressUp(); // re-apply any tint picked before Bryce finished loading
     console.log('Bryce loaded, clips:', Object.keys(clips).join(', '));
   }, undefined, () => {
     console.warn('bryce_animated.glb not found, using procedural character');
@@ -1258,6 +2141,16 @@ function playLoco(name) {
   bryceFadeTo(next, 0.25);
   bryce.loco = next;
 }
+// One-shot transition clips must finish in 1-2s (user rule 2026-11-23):
+// the raw Mixamo clips run 2-6s (Entering Car 5.50s, Exiting Car 5.83s),
+// so play them faster instead of waiting. timeScale is computed from
+// each clip's own duration, so future clips (Eating, Lie_Down) get the
+// same treatment automatically. The 'finished' event fires at the
+// sped-up end, so the state machine follows with no other change.
+// NOTE: timeScale must be set AFTER bryceFadeTo — its reset() restores
+// timeScale to 1.
+const ONE_SHOT_TARGET = { 'Entering Car': 1.0, 'Exiting Car': 1.0, 'Sitting Down': 1.0, 'Stand Up': 1.0 };
+const ONE_SHOT_DEFAULT = 1.5;
 function playOneShot(name, onDone) {
   if (!bryce || !bryce.clips[name] || bryce.oneShot) return false;
   const a = bryce.mixer.clipAction(bryce.clips[name]);
@@ -1265,19 +2158,1997 @@ function playOneShot(name, onDone) {
   a.setLoop(THREE.LoopOnce);
   a.clampWhenFinished = true;
   bryceFadeTo(a, 0.15);
+  const target = ONE_SHOT_TARGET[name] ?? ONE_SHOT_DEFAULT;
+  a.timeScale = Math.max(1, bryce.clips[name].duration / target);
   bryce.oneShot = a;
-  const done = (e) => {
-    if (e.action !== a) return;
+  if (ATTACK_CLIPS.has(name)) checkNpcHits(); // attack one-shot: NPC hit check (see npc-combat)
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(watchdog);
     bryce.mixer.removeEventListener('finished', done);
     bryce.oneShot = null;
     if (onDone) onDone();
     else if (bryce.loco) bryceFadeTo(bryce.loco, 0.2);
   };
+  const done = (e) => {
+    if (e.action !== a) return;
+    finish();
+  };
   bryce.mixer.addEventListener('finished', done);
+  // watchdog: if 'finished' never fires, the one-shot stays stuck and
+  // blocks every exit (test 10's dead-button pattern) — force
+  // completion a little past the expected end instead of hanging
+  const watchdog = setTimeout(finish, (target + 1.5) * 1000);
   return true;
 }
 
+function drinkWater() {
+  // T key / button: play the Drinking clip once (Bryce only). Movement
+  // locks while it plays — updateWalk zeroes move while bryce.oneShot
+  // is set, same as the martial-arts one-shots.
+  if (!bryce || !bryce.clips['Drinking']) return;
+  if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return; // not while sitting down
+  if (carState !== 'none') return; // not while in the car
+  if (bikeState !== 'none') return; // not while riding
+  playOneShot('Drinking');
+}
+
+// ---------- NPCs (v1 prototype: 2 waypoint wanderers, Bryce clones) ----------
+// No new assets: each NPC is a SkeletonUtils.clone of the loaded Bryce
+// (shared geometry/materials/textures — no extra GPU texture memory),
+// with its own AnimationMixer playing the same Idle/Walking clip
+// objects. NPCs wander the pier plaza around the spawn (radius 20m),
+// idle 3-8s at each waypoint, then walk to the next. Spawned once,
+// right after Bryce loads; if Bryce fails to load, no NPCs appear.
+// The Walking clip is In Place (no root motion), so the group is moved
+// by code and the clip only animates the limbs.
+// v1 limits: no collision with the player or with buildings/props,
+// no interaction yet (talk/shop comes later), all NPCs look like Bryce.
+const NPC_COUNT = 2;
+const NPC_WANDER_RADIUS = 20; // metres around the spawn, pier plaza
+const NPC_WALK_SPEED = 1.4; // m/s, a stroll (the player walks 6 m/s)
+const NPC_IDLE_MIN = 3, NPC_IDLE_MAX = 8; // seconds idling per waypoint
+const NPC_ARRIVE_DIST = 0.5; // close enough to count as arrived
+const NPC_TAG_TEXT = '路人'; // generic label — never a personal name
+const NPC_TAG_HEIGHT = 2.2; // sprite floats this high above the feet
+const NPC_TAG_SCALE_X = 2, NPC_TAG_SCALE_Y = 0.5;
+
+let npcs = []; // { group, mixer, action, state, target, idleTimer, yaw }
+let npcTagMat = null; // shared by all name tags (same text, one texture)
+
+function makeNameTagSprite(text) {
+  // canvas label, same recipe as the food-stall sign (256x64, SRGB);
+  // the material is built once and shared — every v1 NPC shows 路人
+  if (!npcTagMat) {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+    const ctx = c.getContext('2d');
+    // dark pill background (manual rounded rect — no ctx.roundRect
+    // dependency, so older phone browsers are safe)
+    const x = 4, y = 8, w = 248, h = 48, r = 12;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 36px "PingFang TC", "Microsoft JhengHei", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, 128, 34);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    npcTagMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  }
+  const sprite = new THREE.Sprite(npcTagMat);
+  sprite.scale.set(NPC_TAG_SCALE_X, NPC_TAG_SCALE_Y, 1);
+  return sprite;
+}
+
+function npcPlay(npc, name) {
+  // per-NPC version of bryceFadeTo/playLoco: the same T-pose trap
+  // applies — an action faded to weight 0 is deactivated and play()
+  // alone cannot revive it, so reset() a non-running action first
+  const clip = bryce.clips[name];
+  if (!clip) return;
+  const next = npc.mixer.clipAction(clip);
+  next.setLoop(THREE.LoopRepeat);
+  if (npc.action === next) return;
+  if (!next.isRunning()) next.reset();
+  if (npc.action) npc.action.crossFadeTo(next, 0.25, false);
+  next.play();
+  npc.action = next;
+}
+
+function npcPickWaypoint(npc) {
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const a = Math.random() * Math.PI * 2;
+  const r = Math.random() * NPC_WANDER_RADIUS;
+  npc.target = { x: sx + Math.cos(a) * r, z: sz + Math.sin(a) * r };
+}
+
+function spawnNpcs() {
+  // called once from loadBryce's success callback — never before Bryce
+  // exists, never twice (a second map load reuses the same bryce object,
+  // so loadBryce does not run again)
+  if (!bryce || !bryce.clips['Idle'] || !bryce.clips['Walking']) return;
+  if (npcs.length) return;
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  // NPC shirt/shorts colours — each NPC gets a different pair so they
+  // don't all look like Bryce (flat colours, map dropped — same as dress-up)
+  const NPC_SHIRTS = [0x4a7fb5, 0xb54a4a];
+  const NPC_SHORTS = [0x3a3a3a, 0x8a7a5a];
+  for (let i = 0; i < NPC_COUNT; i++) {
+    // SkeletonUtils.clone re-binds the skeleton — a plain .clone() would
+    // leave the skinned meshes pointing at Bryce's bones
+    const group = SkeletonUtils.clone(bryce.group);
+    group.rotation.order = 'YXZ'; // knockdown pitch (rotation.x) must tip in the NPC's local frame, not the world frame (see npc-combat)
+    group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    // tint this NPC's shirt/shorts — clone the materials first (the
+    // clone shares Ch42_Body with the player; tinting in place would
+    // recolour Bryce too)
+    group.traverse((o) => {
+      if (!o.isMesh || Array.isArray(o.material)) return;
+      if (o.name === 'Ch42_Shirt' || o.name === 'Ch42_Shorts') {
+        o.material = o.material.clone();
+        // same as dress-up: the textures are coloured, so drop the map
+        // or the tint multiplies against red and never shows true
+        o.material.map = null;
+        o.material.needsUpdate = true;
+        o.material.color.setHex(o.name === 'Ch42_Shirt' ? NPC_SHIRTS[i % NPC_SHIRTS.length] : NPC_SHORTS[i % NPC_SHORTS.length]);
+      }
+    });
+    const mixer = new THREE.AnimationMixer(group);
+    const npc = { group, mixer, action: null, state: 'idle', target: null, idleTimer: 1 + Math.random() * 3, yaw: Math.random() * Math.PI * 2, hits: 0, lastHitAt: -99, stateTimer: 0, fallT: 0, kbX: 0, kbZ: 0, kbSpeed: 0, tag: null };
+    // random start inside the plaza (never on top of the spawn)
+    const a = Math.random() * Math.PI * 2;
+    const r = 4 + Math.random() * (NPC_WANDER_RADIUS - 4);
+    const x = sx + Math.cos(a) * r, z = sz + Math.sin(a) * r;
+    group.position.set(x, groundHeight(x, z, 50), z);
+    group.rotation.y = npc.yaw;
+    const tag = makeNameTagSprite(NPC_TAG_TEXT);
+    tag.position.y = NPC_TAG_HEIGHT;
+    group.add(tag);
+    npc.tag = tag; // hidden while knocked down (see npc-combat)
+    scene.add(group);
+    npcPlay(npc, 'Idle');
+    npcs.push(npc);
+  }
+  console.log('NPCs spawned:', npcs.length);
+}
+
+function updateNpcs(dt) {
+  // called every frame from animate(), right after bryce.mixer.update
+  if (!npcs.length) return;
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  for (const npc of npcs) {
+    npc.mixer.update(dt);
+    const p = npc.group.position;
+    npcKnockbackStep(npc, dt, sx, sz); // combat knockback (no-op when kbSpeed is 0)
+    if (npcCombatStep(npc, dt)) continue; // stunned / down / getting up — handled in npc-combat
+    if (npc.state === 'idle') {
+      npc.idleTimer -= dt;
+      if (npc.idleTimer <= 0) {
+        npcPickWaypoint(npc);
+        npc.state = 'walk';
+        npcPlay(npc, 'Walking');
+      }
+      continue;
+    }
+    const dx = npc.target.x - p.x, dz = npc.target.z - p.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < NPC_ARRIVE_DIST) {
+      npc.state = 'idle';
+      npc.idleTimer = NPC_IDLE_MIN + Math.random() * (NPC_IDLE_MAX - NPC_IDLE_MIN);
+      npcPlay(npc, 'Idle');
+      continue;
+    }
+    // face the movement direction (smooth turn, same shortest-arc
+    // pattern as updateWalk's charYaw lerp)
+    const targetYaw = Math.atan2(dx, dz);
+    let d = targetYaw - npc.yaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    npc.yaw += d * Math.min(1, dt * 6);
+    npc.group.rotation.y = npc.yaw;
+    // step toward the target, staying inside the plaza circle
+    const step = Math.min(NPC_WALK_SPEED * dt, dist);
+    let nx = p.x + (dx / dist) * step;
+    let nz = p.z + (dz / dist) * step;
+    const ox = nx - sx, oz = nz - sz;
+    const od = Math.hypot(ox, oz);
+    if (od > NPC_WANDER_RADIUS) {
+      nx = sx + ox / od * NPC_WANDER_RADIUS;
+      nz = sz + oz / od * NPC_WANDER_RADIUS;
+    }
+    p.set(nx, groundHeight(nx, nz, p.y), nz);
+  }
+}
+
+// ---------- NPC combat (v1: passersby can be hit) ----------
+// The player can hit NPCs with the martial-arts attacks (J punch / K
+// kick / L combo — clips Punching/Kicking). There is NO hit-reaction
+// clip in the 12 Mixamo clips (Idle/Walking/Running, Punching/Kicking,
+// Entering Car/Exiting Car/Driving, Sitting/Sitting Idle/Stand Up,
+// Drinking — see the loadBryce header), so all reactions are procedural:
+// knockback velocity + a rotation-based fall. No counterattack, no
+// death, no HP bar in v1.
+//
+// How it works:
+// - Hit check runs ONCE per swing, synchronously when the attack
+//   one-shot starts (hook in playOneShot — see patch.md step 1). The
+//   combo chains 3 one-shots, so it gets 3 checks, one per strike.
+//   The check reads charPos/charYaw at attack time, so walk-and-attack
+//   (moving during the swing) cannot change which NPCs a swing hits.
+// - A hit NPC is knocked back (decaying velocity) and stunned ~1s
+//   (stops wandering, plays Idle). Hits within NPC_COMBO_WINDOW chain:
+//   the 3rd hit in a row knocks the NPC DOWN — the group tips
+//   backwards onto the ground (rotation.x, eased), lies ~3s, gets up,
+//   resumes wandering. Getting up resets the combo count. Downed NPCs
+//   can't be hit again until they're back on their feet.
+// - The fall tips in the NPC's LOCAL frame: spawnNpcs sets the group's
+//   rotation order to YXZ (patch.md step 3) — with the default XYZ
+//   order rotation.x would pitch about the WORLD X axis and every NPC
+//   would fall toward world -Z regardless of facing. The NPC turns to
+//   face the player at knockdown, so "backwards" is away from the player.
+// - Walk-and-attack (走A): attack one-shots do NOT lock movement (see
+//   isAttackOneShot + the updateWalk lock in patch.md step 5). Other
+//   one-shots (car enter/exit, sit/stand, drinking, sleep) still lock
+//   it. v1 limitation: the attack clip replaces the walk clip, so
+//   Bryce glides (moves without leg animation) for the 1-1.5s of the
+//   sped-up attack — layered upper/lower-body animation is future work.
+const ATTACK_CLIPS = new Set(['Punching', 'Kicking']); // attack one-shots: hit check + no movement lock
+const NPC_HIT_RANGE = 2.0; // metres — punch/kick reach
+const NPC_HIT_DOT = 0.5; // cos(60°): the NPC must be within ~60° of the player's facing
+const NPC_STUN_TIME = 1.0; // seconds the NPC stands stunned after a hit
+const NPC_DOWN_TIME = 3.0; // seconds lying on the ground after a knockdown (after the fall completes)
+const NPC_FALL_TIME = 0.4; // seconds to tip over
+const NPC_RISE_TIME = 0.5; // seconds to get back up
+const NPC_COMBO_WINDOW = 4.0; // seconds — hits closer together than this chain into a combo. Must exceed two punch lockouts: each Punching/Kicking one-shot runs 1.5s (ONE_SHOT_DEFAULT) and playOneShot rejects new input while one is playing, so three mashes land at ~0/1.5/3.0s — a 3.0s window put the 3rd hit exactly on the edge and any input latency broke the combo (test 8, 2026-11-23: rapid JJJ only ever registered one hit, knockdown never happened). 4.0s gives ~1s of slack.
+const NPC_KNOCKDOWN_HITS = 3; // hits in a row to knock the NPC down
+const NPC_KNOCKBACK_SPEED = 6; // m/s initial knockback velocity (stun)
+const NPC_KNOCKDOWN_KB = 10; // m/s initial knockback velocity (knockdown — stronger push)
+const NPC_KB_DECAY = 6; // 1/s — knockback velocity decay (travel distance ≈ speed / decay)
+
+function isAttackOneShot() {
+  // true while an ATTACK one-shot is playing — used by updateWalk's
+  // movement lock (attacks don't root the player) and only there.
+  // bryce.oneShot is the running AnimationAction; getClip() is the
+  // three.js accessor for its clip.
+  return !!(bryce && bryce.oneShot && ATTACK_CLIPS.has(bryce.oneShot.getClip().name));
+}
+
+function checkNpcHits() {
+  // One hit check per swing, at swing start (called from playOneShot
+  // when a Punching/Kicking one-shot starts). Synchronous, so it reads
+  // the player's position/facing AT ATTACK TIME — the player may keep
+  // moving during the swing (walk-and-attack) without affecting which
+  // NPCs this swing hits. Cheap: runs only on attack, never per frame.
+  if (!npcs.length) return;
+  const fx = Math.sin(charYaw), fz = Math.cos(charYaw); // player forward (same convention as the pet follow)
+  for (const npc of npcs) {
+    if (npc.state === 'down' || npc.state === 'gettingup') continue; // already down — can't be hit again
+    const p = npc.group.position;
+    const dx = p.x - charPos.x, dz = p.z - charPos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > NPC_HIT_RANGE) continue;
+    // roughly in front of the player (dist ~ 0 means on top of the
+    // player — counts as in front)
+    const dot = dist > 0.01 ? (dx * fx + dz * fz) / dist : 1;
+    if (dot < NPC_HIT_DOT) continue;
+    npcTakeHit(npc, dx, dz, dist);
+  }
+}
+
+function npcTakeHit(npc, dx, dz, dist) {
+  const now = clock.elapsedTime;
+  // combo: hits within NPC_COMBO_WINDOW of each other chain; a longer
+  // gap resets the count before this hit lands
+  if (now - npc.lastHitAt > NPC_COMBO_WINDOW) npc.hits = 0;
+  npc.hits++;
+  npc.lastHitAt = now;
+  // knockback direction: away from the player (integrated + decayed
+  // by npcKnockbackStep in updateNpcs)
+  const inv = 1 / (dist || 1);
+  npc.kbX = dx * inv;
+  npc.kbZ = dz * inv;
+  if (npc.hits >= NPC_KNOCKDOWN_HITS) {
+    // 3rd hit in a row: knocked down. Face the player first so the
+    // backward fall lands away from the player.
+    npc.yaw = Math.atan2(-dx, -dz);
+    npc.group.rotation.y = npc.yaw;
+    npc.state = 'down';
+    npc.fallT = 0;
+    npc.stateTimer = NPC_DOWN_TIME;
+    npc.kbSpeed = NPC_KNOCKDOWN_KB;
+    npcPlay(npc, 'Idle');
+    if (npc.tag) npc.tag.visible = false; // the tag would lie on the ground behind the head
+  } else {
+    npc.state = 'stunned';
+    npc.stateTimer = NPC_STUN_TIME;
+    npc.kbSpeed = NPC_KNOCKBACK_SPEED;
+    npcPlay(npc, 'Idle');
+  }
+}
+
+function npcKnockbackStep(npc, dt, sx, sz) {
+  // Integrate + decay the knockback velocity. Called for every NPC
+  // every frame from updateNpcs; a no-op when kbSpeed is 0 (the normal
+  // case), so the per-frame cost is one comparison. The slide is
+  // clamped to the wander circle, same as the walk branch.
+  if (npc.kbSpeed <= 0.05) { npc.kbSpeed = 0; return; }
+  const p = npc.group.position;
+  const step = npc.kbSpeed * dt;
+  let nx = p.x + npc.kbX * step;
+  let nz = p.z + npc.kbZ * step;
+  const ox = nx - sx, oz = nz - sz;
+  const od = Math.hypot(ox, oz);
+  if (od > NPC_WANDER_RADIUS) {
+    nx = sx + ox / od * NPC_WANDER_RADIUS;
+    nz = sz + oz / od * NPC_WANDER_RADIUS;
+  }
+  p.set(nx, groundHeight(nx, nz, p.y), nz);
+  npc.kbSpeed *= Math.exp(-NPC_KB_DECAY * dt);
+}
+
+function npcCombatStep(npc, dt) {
+  // Combat states: 'stunned' / 'down' / 'gettingup'. Returns true when
+  // the NPC is in a combat state — the caller (updateNpcs) must
+  // `continue` and skip the idle/walk branches. Returns false for
+  // 'idle'/'walk' (handled by the existing branches).
+  if (npc.state === 'stunned') {
+    npc.stateTimer -= dt;
+    if (npc.stateTimer <= 0) {
+      npc.state = 'idle';
+      npc.idleTimer = 1; // brief pause, then wander again
+      npcPlay(npc, 'Idle');
+    }
+    return true;
+  }
+  if (npc.state === 'down') {
+    if (npc.fallT < 1) {
+      // falling: tip backwards onto the ground (smoothstep eased).
+      // rotation.x is negative = head toward local -Z = on the back.
+      npc.fallT = Math.min(1, npc.fallT + dt / NPC_FALL_TIME);
+      const t = npc.fallT * npc.fallT * (3 - 2 * npc.fallT);
+      npc.group.rotation.x = -Math.PI / 2 * t;
+    } else {
+      npc.stateTimer -= dt;
+      if (npc.stateTimer <= 0) {
+        npc.state = 'gettingup';
+        npc.fallT = 0;
+      }
+    }
+    return true;
+  }
+  if (npc.state === 'gettingup') {
+    npc.fallT = Math.min(1, npc.fallT + dt / NPC_RISE_TIME);
+    const t = npc.fallT * npc.fallT * (3 - 2 * npc.fallT);
+    npc.group.rotation.x = -Math.PI / 2 * (1 - t);
+    if (npc.fallT >= 1) {
+      npc.group.rotation.x = 0;
+      npc.hits = 0; // getting up resets the combo count
+      npc.state = 'idle';
+      npc.idleTimer = 1;
+      if (npc.tag) npc.tag.visible = true;
+      npcPlay(npc, 'Idle');
+    }
+    return true;
+  }
+  return false;
+}
+
+// ---------- pet dog (v1: procedural geometric dog, follows the player) ----------
+// No external model: the dog is built from primitives (body, head, snout,
+// floppy ears, 4 legs, tail), ~0.6m long, brown/tan. A real model can swap
+// in later by replacing createPet()'s geometry — the follow logic only
+// touches pet.group / pet.legs / pet.ears / pet.tail.
+// Follow: target = 1.5m behind the player + 0.5m to the player's right.
+// The dog runs slightly faster than the player when far behind, stops
+// within 1m, and snaps back if separated by >30m (teleport / respawn /
+// dismount far away). It stays put while the player drives, rides, or is
+// in fly mode, and catches up afterwards. No collision in v1.
+const PET_FOLLOW_BACK = 1.5;   // metres behind the player
+const PET_FOLLOW_SIDE = 0.5;   // metres to the player's right
+const PET_STOP_DIST = 1.0;     // stop and idle within this of the target
+const PET_SNAP_DIST = 30;      // snap back if further than this (horizontal)
+const PET_MIN_SPEED = 2.5;     // m/s, amble when the player is idle
+const PET_MAX_SPEED = 32;      // m/s, must outrun a buffed run (30 m/s)
+const PET_CATCHUP_MULT = 1.35; // dog speed = player speed x this, clamped
+
+let pet = null; // { group, yaw, legs: {fl,fr,rl,rr}, ears: {l,r}, tail, phase, moving }
+let _petPrevPlayer = new THREE.Vector3(); // for estimating player speed
+let _petPlayerSpeed = 0; // smoothed player horizontal speed, m/s
+
+function createPet() {
+  if (pet) { scene.remove(pet.group); pet = null; }
+  if (!model) return;
+  // spawn beside the player (offset so it is not on top of the spawn)
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const px = sx + 1.5, pz = sz + 1.2;
+  const g = new THREE.Group();
+  const tan = new THREE.MeshStandardMaterial({ color: 0xb08954, roughness: 0.9 });
+  const brown = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.9 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 });
+  const mesh = (geo, m, x, y, z, parent = g) => {
+    const o = new THREE.Mesh(geo, m);
+    o.position.set(x, y, z);
+    o.castShadow = false; // small prop — skip the shadow pass for perf
+    parent.add(o);
+    return o;
+  };
+  // body: 0.22w x 0.22h x 0.5d, bottom at leg-top height (0.24m)
+  mesh(new THREE.BoxGeometry(0.22, 0.22, 0.5), tan, 0, 0.35, 0);
+  // head + snout + nose at the front (+Z)
+  mesh(new THREE.BoxGeometry(0.2, 0.2, 0.22), tan, 0, 0.46, 0.32);
+  mesh(new THREE.BoxGeometry(0.12, 0.1, 0.14), brown, 0, 0.42, 0.47);
+  mesh(new THREE.BoxGeometry(0.06, 0.05, 0.03), dark, 0, 0.44, 0.545);
+  // floppy ears: pivot at the top of each ear so they can flop; the mesh
+  // hangs down (-y) and tilts slightly outward (rotation.z)
+  const ears = {};
+  for (const [key, side] of [['l', -1], ['r', 1]]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.11, 0.54, 0.30);
+    pivot.rotation.z = side * 0.15;
+    mesh(new THREE.BoxGeometry(0.04, 0.18, 0.12), brown, 0, -0.09, 0, pivot);
+    g.add(pivot);
+    ears[key] = pivot;
+  }
+  // legs: pivot at the shoulder/hip (top), mesh hangs down so the pivot
+  // rotation.x swings the foot forward/back
+  const legs = {};
+  for (const [key, lx, lz] of [['fl', -0.08, 0.17], ['fr', 0.08, 0.17], ['rl', -0.08, -0.17], ['rr', 0.08, -0.17]]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(lx, 0.24, lz);
+    mesh(new THREE.BoxGeometry(0.07, 0.24, 0.07), tan, 0, -0.12, 0, pivot);
+    g.add(pivot);
+    legs[key] = pivot;
+  }
+  // tail: pivot at the rear, raised ~30 deg (rotation.x), wags via rotation.y
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.42, -0.26);
+  tail.rotation.x = -0.5;
+  mesh(new THREE.BoxGeometry(0.05, 0.05, 0.3), brown, 0, 0.06, -0.15, tail);
+  g.add(tail);
+  g.position.set(px, groundHeight(px, pz, 50), pz);
+  g.rotation.y = 0; // face the harbour (+Z), like the player
+  scene.add(g);
+  pet = { group: g, yaw: 0, legs, ears, tail, phase: 0, moving: false };
+  _petPrevPlayer.copy(charPos);
+  _petPlayerSpeed = 0;
+}
+
+function updatePet(dt) {
+  // called every frame from animate(), right after updateNpcs(dt)
+  if (!pet || !model) return;
+  // estimate the player's horizontal speed from frame-to-frame movement
+  const rawSpeed = charPos.distanceTo(_petPrevPlayer) / Math.max(dt, 0.001);
+  _petPrevPlayer.copy(charPos);
+  // smooth it — a teleport spikes the raw reading for one frame
+  _petPlayerSpeed += (Math.min(rawSpeed, 60) - _petPlayerSpeed) * Math.min(1, dt * 8);
+
+  const p = pet.group.position;
+  // follow target: behind the player, slightly to the player's right
+  const fx = Math.sin(charYaw), fz = Math.cos(charYaw); // player forward
+  const rx = Math.cos(charYaw), rz = -Math.sin(charYaw); // player right
+  const tx = charPos.x - fx * PET_FOLLOW_BACK + rx * PET_FOLLOW_SIDE;
+  const tz = charPos.z - fz * PET_FOLLOW_BACK + rz * PET_FOLLOW_SIDE;
+
+  // snap back if separated (respawn / teleport / dismount far away);
+  // horizontal distance only — the room sits at y=300 above the spawn
+  // and the dog should wait underneath, not chase the altitude
+  const dxp = charPos.x - p.x, dzp = charPos.z - p.z;
+  if (Math.hypot(dxp, dzp) > PET_SNAP_DIST) {
+    p.set(tx, groundHeight(tx, tz, 50), tz);
+    pet.yaw = charYaw;
+    pet.group.rotation.y = charYaw;
+  }
+
+  // stay put while the player drives, rides, or flies the camera — the
+  // dog catches up once the player is back on foot. (Flying on foot
+  // with Space held is fine: charPos stays on the ground plane and the
+  // dog just follows the XZ position below.)
+  const parked = mode !== 'walk' || carState !== 'none' || bikeState !== 'none';
+  const dx = tx - p.x, dz = tz - p.z;
+  const dist = Math.hypot(dx, dz);
+  pet.moving = !parked && dist > PET_STOP_DIST;
+  if (pet.moving) {
+    // face the movement direction (shortest-arc lerp, same as NPCs)
+    const targetYaw = Math.atan2(dx, dz);
+    let d = targetYaw - pet.yaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    pet.yaw += d * Math.min(1, dt * 8);
+    pet.group.rotation.y = pet.yaw;
+    // run slightly faster than the player so it catches up, but never
+    // overshoot the target in one step
+    const speed = THREE.MathUtils.clamp(_petPlayerSpeed * PET_CATCHUP_MULT, PET_MIN_SPEED, PET_MAX_SPEED);
+    const step = Math.min(speed * dt, dist);
+    p.x += (dx / dist) * step;
+    p.z += (dz / dist) * step;
+    pet.phase += dt * (2 + speed * 0.55); // stride rate scales with speed
+  }
+  // stay on the ground; add a small bob while moving
+  p.y = groundHeight(p.x, p.z, p.y) + (pet.moving ? Math.abs(Math.sin(pet.phase)) * 0.02 : 0);
+  animatePet(dt);
+}
+
+function animatePet(dt) {
+  // legs: diagonal pairs swing in opposition while moving, ease back to
+  // 0 when idle; ears flop a little while running; the tail always wags
+  // (faster + wider while moving)
+  const swing = pet.moving ? Math.sin(pet.phase) * 0.6 : 0;
+  const k = Math.min(1, dt * 10); // ease rate back to rest pose
+  const m = pet.moving ? 1 : k; // snap to the swing while moving, ease when idle
+  pet.legs.fl.rotation.x += (swing - pet.legs.fl.rotation.x) * m;
+  pet.legs.rr.rotation.x += (swing - pet.legs.rr.rotation.x) * m;
+  pet.legs.fr.rotation.x += (-swing - pet.legs.fr.rotation.x) * m;
+  pet.legs.rl.rotation.x += (-swing - pet.legs.rl.rotation.x) * m;
+  const flop = pet.moving ? Math.sin(pet.phase) * 0.12 : 0;
+  pet.ears.l.rotation.x += (flop - pet.ears.l.rotation.x) * m;
+  pet.ears.r.rotation.x += (flop - pet.ears.r.rotation.x) * m;
+  const wagSpeed = pet.moving ? 11 : 6;
+  const wagAmp = pet.moving ? 0.5 : 0.3;
+  pet.tail.rotation.y = Math.sin(clock.elapsedTime * wagSpeed) * wagAmp;
+}
+
+// ---------- bench + sitting (Mixamo Sitting / Sitting Idle / Stand Up) ----------
+// One procedural bench on the pier plaza, 6m south of the spawn, facing
+// the harbour. Sitting is Bryce-only (the procedural fallback has no
+// skeleton, so its Sitting clips don't exist). State machine:
+// 'stand' -> E near bench -> 'sitting' (Sitting one-shot) -> 'seated'
+// (Sitting Idle loop) -> E -> 'standing' (Stand Up one-shot) -> 'stand'.
+// Movement is locked in every state except 'stand'; the transitions
+// ignore E so a double-tap can't desync the state.
+let bench = null; // { group, pos, sitPos, yaw }
+let sitState = 'stand';
+const SIT_RANGE = 2.5;
+
+function createBench() {
+  if (bench) { scene.remove(bench.group); bench = null; }
+  if (!model) return;
+  // bench 6m south of the spawn, on the open plaza (17m+ clear of
+  // buildings), seat facing the harbour (+Z) — same view as the spawn.
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const bx = sx, bz = sz + 6;
+  const by = groundHeight(bx, bz, 50);
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x2f3336, roughness: 0.5, metalness: 0.6 });
+  const box = (w, h, d, m, x, y, z, rx = 0) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    b.rotation.x = rx;
+    g.add(b);
+    return b;
+  };
+  // seat: three wood slats, top at 0.45m (Mixamo sitting hip height)
+  for (const dz of [-0.18, 0, 0.18]) box(1.8, 0.06, 0.16, wood, 0, 0.42, dz);
+  // backrest: two wood slats on the north side, tilted back slightly
+  box(1.8, 0.14, 0.05, wood, 0, 0.7, -0.28, -0.15);
+  box(1.8, 0.14, 0.05, wood, 0, 0.92, -0.31, -0.15);
+  // dark metal frame: side legs + back posts + stretcher
+  for (const dx of [-0.8, 0.8]) {
+    box(0.06, 0.45, 0.5, metal, dx, 0.225, 0);
+    box(0.06, 0.95, 0.06, metal, dx, 0.475, -0.27, -0.15);
+  }
+  box(1.6, 0.05, 0.05, metal, 0, 0.15, 0);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(bx, by, bz);
+  scene.add(g);
+  // sit spot: in front of the seat's front edge, facing the harbour.
+  // The hips land ~0.3m behind the feet in the Mixamo sitting pose,
+  // which puts them on the seat (seat spans z -0.275..+0.275).
+  bench = {
+    group: g,
+    pos: new THREE.Vector3(bx, by, bz),
+    sitPos: new THREE.Vector3(bx, by, bz + 0.35),
+    yaw: 0
+  };
+}
+
+// Bench collision: keep the walker out of the bench's footprint.
+// The rect is the seat (1.8m wide, z -0.31..+0.26 with the backrest)
+// expanded by the character's radius (0.4m) — except the front
+// (south) side, which stays tight at the seat's front edge so the
+// sit spot (z +0.35) remains outside the collision: sitting down
+// must not fight the push-out. Skipped while sitting (the sitter is
+// meant to be at the seat) and while flying above the bench.
+function collideBench() {
+  if (!bench || sitState !== 'stand') return;
+  if (charPos.y > bench.pos.y + 1.2) return; // flying over it
+  const hw = 0.9 + 0.4, zMin = -0.31 - 0.4, zMax = 0.30;
+  const lx = charPos.x - bench.pos.x, lz = charPos.z - bench.pos.z;
+  if (Math.abs(lx) > hw || lz < zMin || lz > zMax) return; // outside
+  // push out along the nearest edge (v1: no sliding, just block)
+  const dx = hw - Math.abs(lx), dn = lz - zMin, ds = zMax - lz;
+  if (dx <= dn && dx <= ds) charPos.x = bench.pos.x + Math.sign(lx || 1) * hw;
+  else if (dn <= ds) charPos.z = bench.pos.z + zMin;
+  else charPos.z = bench.pos.z + zMax;
+}
+
+function toggleSit() {
+  if (!bryce || !bench) return; // Bryce only
+  if (mode !== 'walk' || flying) return;
+  if (carState !== 'none') return; // can't sit down while in the car
+  if (bikeState !== 'none') return; // can't sit down while riding
+  if (sitState === 'stand') {
+    const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
+    if (d > SIT_RANGE) return;
+    if (bryce.oneShot) return; // wait for a move (e.g. punch) to finish
+    if (!bryce.clips['Sitting'] || !bryce.clips['Sitting Idle']) return;
+    // snap to the sit spot (v1: no walk-up animation)
+    sitState = 'sitting';
+    charPos.copy(bench.sitPos);
+    charYaw = bench.yaw;
+    charGroup.position.copy(charPos);
+    charGroup.rotation.y = charYaw;
+    bryce.group.position.copy(charPos);
+    bryce.group.rotation.y = charYaw;
+    if (!playOneShot('Sitting', () => {
+      if (sitState !== 'sitting') return; // cancelled (mode switch / reset)
+      sitState = 'seated';
+      playLoco('Sitting Idle');
+    })) sitState = 'stand';
+  } else if (sitState === 'seated') {
+    if (bryce.oneShot) return;
+    if (!bryce.clips['Stand Up']) return;
+    sitState = 'standing';
+    if (!playOneShot('Stand Up', () => {
+      if (sitState !== 'standing') return; // cancelled
+      sitState = 'stand';
+      playLoco('Idle');
+    })) sitState = 'seated';
+  }
+  // 'sitting' / 'standing' transitions ignore E
+}
+
+function cancelSit() {
+  // force back to standing (mode switch / respawn). The in-flight
+  // one-shot (if any) still finishes on its own, but its onDone is
+  // guarded by sitState and returns early; updateWalk's playLoco('Idle')
+  // then takes over on the next frame.
+  if (sitState === 'stand') return;
+  sitState = 'stand';
+}
+
+const sitPromptEl = document.getElementById('sit-prompt');
+let lastSitPrompt = null;
+function updateSitPrompt() {
+  let text = '';
+  if (bench && bryce && mode === 'walk') {
+    if (sitState === 'seated') text = '按 E 站起來'; // 'sitting' is a transition: E is ignored then, so no prompt (test 10)
+    else if (sitState === 'stand' && !flying) {
+      const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
+      if (d <= SIT_RANGE) text = '按 E 坐下';
+    }
+  }
+  if (text !== lastSitPrompt) {
+    lastSitPrompt = text;
+    sitPromptEl.textContent = text;
+    sitPromptEl.style.display = text ? 'block' : 'none';
+  }
+}
+
+// ---------- car + driving (Mixamo Entering Car / Driving / Exiting Car) ----------
+// One procedural car on the pier plaza, 9m north of the spawn, facing the
+// harbour (+Z, same as the spawn). Driving is Bryce-only. State machine:
+// 'none' -> F near the driver door -> 'entering' (Entering Car one-shot)
+// -> 'driving' (Driving loop, W/S throttle, A/D steering) -> F ->
+// 'exiting' (Exiting Car one-shot) -> 'none'. Collision: collideCar()
+// pushes the car out of building footprints and stops it (speed = 0).
+// The driver door is on the LEFT side
+// (left-hand drive; facing +Z, left is +X). The Mixamo enter/exit clips
+// are LHD-oriented — Exiting Car drifts +1.82m toward the character's
+// left — so LHD makes the clips exit out the driver door instead of
+// phasing through to the passenger side (measured 2026-11-23).
+let car = null; // { group, pos, yaw, speed }
+let carState = 'none';
+const CAR_RANGE = 3.5; // measured from the car CENTRE (like the bike):
+// a door-point range left the far corners + passenger side outside the
+// trigger, so walking up casually never showed the prompt (2026-11-23
+// browser test could not enter the car at all). Car half-diagonal is
+// ~2.5m, so 3.5m covers the whole car + a step around it.
+const CAR_ACCEL = 5.6, CAR_BRAKE = 20, CAR_DRAG = 0.4; // drag 0.4 (was 1.2 — at 5 m/s it braked harder than the engine accelerates; test 9/10)
+const CAR_MAX_SPEED = 19.5, CAR_MAX_FAST = 32.5, CAR_MAX_REVERSE = 5; // top speed +30%, accel -30% (2026-11-23 user)
+const CAR_DOOR_LOCAL = new THREE.Vector3(1.15, 0, 0.4);
+// Entering Car's root motion carries the character +1.76m forward (measured
+// headlessly, 2026-11-23), so the enter starts 1.76m BEHIND the door: the
+// clip then walks him exactly to the door instead of past the front bumper.
+// Range check still uses the door; only the snap point is offset.
+const CAR_ENTER_START_LOCAL = new THREE.Vector3(1.15, 0, -1.36);
+const CAR_SEAT_LOCAL = new THREE.Vector3(0.45, 0, 0.3); // seat at ground: measured seated headtop 1.420, roof underside 1.47 (5cm margin)
+
+function carLocalToWorld(local) {
+  // rotate a car-local offset by the car's yaw, add the car position
+  const c = Math.cos(car.yaw), s = Math.sin(car.yaw);
+  return new THREE.Vector3(
+    car.pos.x + local.x * c + local.z * s,
+    car.pos.y + local.y,
+    car.pos.z - local.x * s + local.z * c
+  );
+}
+
+function createCar() {
+  if (car) { scene.remove(car.group); car = null; }
+  if (!model) return;
+  // 9m north of the spawn on the open plaza (17m+ clear of buildings)
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z - 9;
+  const cy = groundHeight(sx, sz, 50);
+  const g = new THREE.Group();
+  const paint = new THREE.MeshStandardMaterial({ color: 0x2a3542, roughness: 0.35, metalness: 0.6 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x3a4a55, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.25, depthWrite: false });
+  const tyre = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+  const light = new THREE.MeshStandardMaterial({ color: 0xfff6c9, roughness: 0.3, emissive: 0x555533 });
+  const box = (w, h, d, m, x, y, z) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    g.add(b);
+    return b;
+  };
+  box(1.9, 0.7, 4.5, paint, 0, 0.65, 0);        // body
+  // cabin is open (roof + pillars), not a solid box — the driver must stay visible
+  box(1.7, 0.08, 2.2, paint, 0, 1.51, -0.2);    // roof (underside 1.47)
+  box(0.08, 0.52, 0.08, paint, -0.8, 1.21, -1.24); // pillars
+  box(0.08, 0.52, 0.08, paint, 0.8, 1.21, -1.24);
+  box(0.08, 0.52, 0.08, paint, -0.8, 1.21, 0.84);
+  box(0.08, 0.52, 0.08, paint, 0.8, 1.21, 0.84);
+  box(1.74, 0.45, 2.0, glass, 0, 1.25, -0.2);   // window band (transparent)
+  box(0.35, 0.18, 0.06, light, -0.6, 0.7, 2.26); // headlights
+  box(0.35, 0.18, 0.06, light, 0.6, 0.7, 2.26);
+  const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 16);
+  const hubGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.32, 12);
+  const hubMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.4, metalness: 0.7 });
+  for (const [wx, wz] of [[-0.95, 1.45], [0.95, 1.45], [-0.95, -1.45], [0.95, -1.45]]) {
+    const w = new THREE.Mesh(wheelGeo, tyre);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(wx, 0.35, wz);
+    g.add(w);
+    const hub = new THREE.Mesh(hubGeo, hubMat);
+    hub.rotation.z = Math.PI / 2;
+    hub.position.set(wx, 0.35, wz);
+    g.add(hub);
+  }
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(sx, cy, sz);
+  g.rotation.y = 0; // facing south (+Z), same as the spawn
+  scene.add(g);
+  car = { group: g, pos: new THREE.Vector3(sx, cy, sz), yaw: 0, speed: 0 };
+}
+
+function toggleCar() {
+  if (!bryce || !car) return; // Bryce only
+  if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return; // can't get in while sitting down
+  if (carState === 'none') {
+    // range from the car centre (see CAR_RANGE): the door is only
+    // used for the enter snap point, not the trigger
+    const d = Math.hypot(charPos.x - car.pos.x, charPos.z - car.pos.z);
+    if (d > CAR_RANGE) return;
+    if (bryce.oneShot) return; // wait for a move (e.g. punch) to finish
+    if (!bryce.clips['Entering Car'] || !bryce.clips['Driving']) return;
+    // snap to the enter-start point, 1.76m behind the door (v1: no walk-up
+    // animation) — the Entering Car clip's own root motion walks him forward
+    // to the door from there
+    carState = 'entering';
+    const start = carLocalToWorld(CAR_ENTER_START_LOCAL);
+    charPos.set(start.x, groundHeight(start.x, start.z, car.pos.y), start.z);
+    _prevPos.copy(charPos); // so the speedometer doesn't spike on the enter snap
+    charYaw = car.yaw;
+    charGroup.position.copy(charPos);
+    charGroup.rotation.y = charYaw;
+    bryce.group.position.copy(charPos);
+    bryce.group.rotation.y = charYaw;
+    if (!playOneShot('Entering Car', () => {
+      if (carState !== 'entering') return; // cancelled (mode switch / reset)
+      carState = 'driving';
+      playLoco('Driving');
+    })) carState = 'none';
+  } else if (carState === 'driving') {
+    if (bryce.oneShot) return;
+    if (!bryce.clips['Exiting Car']) return;
+    carState = 'exiting';
+    car.speed = 0;
+    if (!playOneShot('Exiting Car', () => {
+      if (carState !== 'exiting') return; // cancelled
+      exitCarToGround();
+    })) carState = 'driving';
+  }
+  // 'entering' / 'exiting' transitions ignore F
+}
+
+function exitCarToGround() {
+  // Bryce back on the ground by the driver door, walk mode resumes
+  const door = carLocalToWorld(CAR_DOOR_LOCAL);
+  charPos.set(door.x, groundHeight(door.x, door.z, car.pos.y), door.z);
+  _prevPos.copy(charPos); // so the speedometer doesn't spike on the exit snap
+  charYaw = car.yaw;
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  bryce.group.position.copy(charPos);
+  bryce.group.rotation.y = charYaw;
+  carState = 'none';
+  playLoco('Idle');
+}
+
+function cancelCar() {
+  // force out of the car without the animation (mode switch / respawn).
+  // The in-flight one-shot (if any) still finishes on its own, but its
+  // onDone is guarded by carState and returns early; updateWalk's
+  // playLoco('Idle') then takes over on the next frame.
+  if (carState === 'none') return;
+  if (car) exitCarToGround(); // also resets carState + plays Idle
+  else carState = 'none';
+}
+
+const carPromptEl = document.getElementById('car-prompt');
+let lastCarPrompt = null;
+function updateCarPrompt() {
+  let text = '';
+  if (car && bryce && mode === 'walk') {
+    if (carState === 'driving') text = '按 F 下車'; // 'entering' is a transition: F is ignored then, so no prompt (test 10)
+    else if (carState === 'none' && !flying) {
+      const d = Math.hypot(charPos.x - car.pos.x, charPos.z - car.pos.z);
+      if (d <= CAR_RANGE) text = '按 F 上車';
+    }
+  }
+  if (text !== lastCarPrompt) {
+    lastCarPrompt = text;
+    carPromptEl.textContent = text;
+    carPromptEl.style.display = text ? 'block' : 'none';
+  }
+}
+
+// ---------- food stall + eating (Sleeping Dogs style) ----------
+// One procedural dai pai dong on the pier plaza, 8m east of the spawn
+// (bench is 6m south, car 9m north — the three never crowd each other),
+// front facing the spawn (-X). Eating restores health and gives a 60s
+// run-speed buff, like food stalls in Sleeping Dogs. The Eating clip
+// (CMU 79_15 retarget) lands later from the Blender batch; until then
+// the effects still apply with no animation (console.warn only).
+let stall = null; // { group, pos, yaw }
+const EAT_RANGE = 2.5;
+const EAT_HEAL = 25;
+const EAT_COOLDOWN = 3; // seconds between meals (anti-spam; matches the Eating clip length)
+const SPEED_BUFF_MULT = 1.2;
+const SPEED_BUFF_SECS = 60;
+const HEALTH_MAX = 100;
+const FALL_DAMAGE_MIN = 8;   // drops of 8m or less are free
+const FALL_DAMAGE_PER_M = 3; // health lost per metre past the free drop
+const FALL_DAMAGE_CAP = 50;  // max health lost in a single fall
+let health = HEALTH_MAX;
+let speedBuffUntil = 0; // clock.elapsedTime when the run-speed buff ends
+let lastEatAt = -EAT_COOLDOWN;
+let fallStartY = null; // takeoff height while airborne (null = grounded)
+
+function createStall() {
+  if (stall) { scene.remove(stall.group); stall = null; }
+  if (!model) return;
+  // stall 8m east of the spawn, on the open plaza; front faces the
+  // spawn (world -X), so the group yaw is -PI/2 (local +Z -> -X).
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const tx = sx + 8, tz = sz;
+  const ty = groundHeight(tx, tz, 50);
+  const g = new THREE.Group();
+  const steel = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.4, metalness: 0.6 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 });
+  const green = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9 });
+  const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2f3336, roughness: 0.5, metalness: 0.6 });
+  const red = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.7 });
+  const box = (w, h, d, m, x, y, z, rx = 0) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    b.rotation.x = rx;
+    g.add(b);
+    return b;
+  };
+  const cyl = (rT, rB, h, m, x, y, z) => {
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(rT, rB, h, 12), m);
+    c.position.set(x, y, z);
+    g.add(c);
+    return c;
+  };
+  // canopy: flat green roof on 4 poles, slight tilt so rain would run off
+  for (const dx of [-1.5, 1.5]) for (const dz of [-1.05, 1.05]) cyl(0.04, 0.04, 2.4, darkMetal, dx, 1.2, dz);
+  box(3.4, 0.08, 2.4, green, 0, 2.45, 0, 0.08);
+  // front counter (steel + wood top) + back counter
+  box(2.6, 0.9, 0.7, steel, 0, 0.45, 0.2);
+  box(2.7, 0.06, 0.8, wood, 0, 0.93, 0.2);
+  box(2.6, 0.9, 0.5, steel, 0, 0.45, -0.85);
+  // two pots on the counter
+  cyl(0.16, 0.14, 0.22, darkMetal, -0.8, 1.07, 0.2);
+  cyl(0.16, 0.14, 0.22, darkMetal, 0.8, 1.07, 0.2);
+  // two red plastic stools in front of the counter
+  for (const dx of [-0.7, 0.7]) {
+    cyl(0.03, 0.03, 0.45, darkMetal, dx, 0.225, 1.0);
+    cyl(0.18, 0.18, 0.05, red, dx, 0.47, 1.0);
+  }
+  // sign: canvas texture "大排檔", mounted on the canopy's front edge
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#b91c1c'; ctx.fillRect(0, 0, 256, 64);
+  ctx.fillStyle = '#fde047';
+  ctx.font = 'bold 40px "PingFang TC", "Microsoft JhengHei", sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('大排檔', 128, 34);
+  const signTex = new THREE.CanvasTexture(c);
+  signTex.colorSpace = THREE.SRGBColorSpace;
+  // two planes, one per side: a single DoubleSide plane mirrors the text
+  // from behind (test 9). The back plane is rotated 180° so the text
+  // reads correctly from both sides.
+  const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), signMat);
+  sign.position.set(0, 2.6, 1.18);
+  g.add(sign);
+  const signBack = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), signMat);
+  signBack.position.set(0, 2.6, 1.16);
+  signBack.rotation.y = Math.PI;
+  g.add(signBack);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(tx, ty, tz);
+  g.rotation.y = -Math.PI / 2;
+  scene.add(g);
+  stall = { group: g, pos: new THREE.Vector3(tx, ty, tz), yaw: -Math.PI / 2 };
+}
+
+// Stall collision: same push-out as collideBench, but the stall is
+// rotated (front faces -X), so the test runs in the stall's local
+// frame. Skipped while sitting and while flying above the sign.
+function collideStall() {
+  if (!stall || sitState !== 'stand') return;
+  if (charPos.y > stall.pos.y + 3.0) return; // flying over the sign
+  const dx = charPos.x - stall.pos.x, dz = charPos.z - stall.pos.z;
+  const c = Math.cos(stall.yaw), s = Math.sin(stall.yaw);
+  // world -> local (rotation.y = yaw maps local +Z to world -X)
+  const lx = dx * c - dz * s;
+  const lz = dx * s + dz * c;
+  const hw = 1.7 + 0.4, hd = 1.2 + 0.4; // canopy footprint + character radius
+  if (Math.abs(lx) > hw || Math.abs(lz) > hd) return; // outside
+  const px = hw - Math.abs(lx), pz = hd - Math.abs(lz);
+  let nx = lx, nz = lz;
+  if (px <= pz) nx = Math.sign(lx || 1) * hw;
+  else nz = Math.sign(lz || 1) * hd;
+  // local -> world
+  charPos.x = stall.pos.x + nx * c + nz * s;
+  charPos.z = stall.pos.z - nx * s + nz * c;
+}
+
+const healthFillEl = document.getElementById('health-fill');
+const healthTextEl = document.getElementById('health-text');
+const buffTextEl = document.getElementById('buff-text');
+function updateHealthUI() {
+  healthFillEl.style.width = (health / HEALTH_MAX * 100) + '%';
+  healthFillEl.style.background = health < 30 ? '#ef4444' : (health < 60 ? '#f59e0b' : '#22c55e');
+  healthTextEl.textContent = '體力 ' + Math.round(health) + '/' + HEALTH_MAX;
+}
+
+let lastBuffText = null;
+function updateBuffUI() {
+  // per-frame (called from animate): the countdown ticks every second
+  const left = speedBuffUntil - clock.elapsedTime;
+  const text = left > 0 ? '跑速提升：' + Math.ceil(left) + ' 秒' : '';
+  if (text !== lastBuffText) {
+    lastBuffText = text;
+    buffTextEl.textContent = text;
+  }
+}
+
+function applyEatEffects() {
+  health = Math.min(HEALTH_MAX, health + EAT_HEAL);
+  speedBuffUntil = clock.elapsedTime + SPEED_BUFF_SECS;
+  lastEatAt = clock.elapsedTime;
+  updateHealthUI();
+  updateBuffUI();
+  showToast('吃飽了！跑速提升 60 秒', 3000);
+}
+
+function eatFood() {
+  // E key / button near the food stall. Guards mirror drinkWater
+  // (walk mode, on foot, not sitting/driving, no one-shot playing).
+  // Unlike drinking, eating works without Bryce: the effects apply
+  // even before the Eating clip lands (console.warn only).
+  if (!stall) return;
+  if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return;
+  if (carState !== 'none') return;
+  if (bikeState !== 'none') return;
+  const d = Math.hypot(charPos.x - stall.pos.x, charPos.z - stall.pos.z);
+  if (d > EAT_RANGE) return;
+  if (bryce && bryce.oneShot) return; // wait for a move to finish
+  if (clock.elapsedTime - lastEatAt < EAT_COOLDOWN) return;
+  if (bryce && bryce.clips['Eating']) {
+    // movement locks while the clip plays (updateWalk zeroes move
+    // while bryce.oneShot is set, same as Drinking)
+    playOneShot('Eating');
+  } else {
+    console.warn('Eating clip not loaded yet — applying effects without animation');
+  }
+  applyEatEffects();
+}
+
+const eatPromptEl = document.getElementById('eat-prompt');
+let lastEatPrompt = null;
+function updateEatPrompt() {
+  let text = '';
+  if (stall && mode === 'walk' && sitState === 'stand' && carState === 'none' && !flying) {
+    const d = Math.hypot(charPos.x - stall.pos.x, charPos.z - stall.pos.z);
+    if (d <= EAT_RANGE) text = '按 E 吃飯';
+  }
+  if (text !== lastEatPrompt) {
+    lastEatPrompt = text;
+    eatPromptEl.textContent = text;
+    eatPromptEl.style.display = text ? 'block' : 'none';
+  }
+}
+
+// Fall damage: called from updateWalk when a walk-mode fall lands.
+// Drops of 8m or less are free; past that, 3 health per metre, capped
+// at 50 per fall. At 0 health the character respawns at the spawn
+// with full health (the buff, if any, is kept).
+function applyFallDamage(drop) {
+  const dmg = Math.min(FALL_DAMAGE_CAP, Math.round((drop - FALL_DAMAGE_MIN) * FALL_DAMAGE_PER_M));
+  health -= dmg;
+  if (health <= 0) {
+    health = 0;
+    updateHealthUI();
+    spawnCharacter(); // teleports home and resets the fall tracker
+    health = HEALTH_MAX;
+    updateHealthUI();
+    showToast('你摔倒了，已回到出生點', 4000);
+  } else {
+    updateHealthUI();
+    showToast('摔了一跤！體力 -' + dmg, 3000);
+  }
+}
+
+// ---------- bed + sleeping (KayKit Lie_Down / Sleeping / Lie_StandUp) ----------
+// One procedural bed on the pier plaza, 8m west of the spawn (bench is
+// 6m south, car 9m north, food stall 8m east — the four never crowd
+// each other). Sleeping restores health to full. The clips land later
+// from the Blender retarget batch (KayKit Lie_Idle -> 'Sleeping'); until
+// then a black fade stands in for the sleep (no error toast).
+// State machine: 'awake' -> E near bed -> 'lying' (Lie_Down one-shot,
+// or the fade) -> 'asleep' ('Sleeping' loop, or black screen) -> E ->
+// 'waking' (Lie_StandUp one-shot) -> 'awake'. The health restore applies
+// on waking up, so a cancelled sleep restores nothing. Movement + J/K/L
+// lock in every state except 'awake'; the transitions ignore E so a
+// double-tap can't desync the state. Sleeping works without Bryce (fade
+// path), like eating.
+let bed = null; // { group, pos, sleepPos, sleepYaw }
+let sleepState = 'awake';
+const SLEEP_RANGE = 2.5;
+const SLEEP_FADE_MS = 1000;  // must match the #sleep-fade CSS transition
+const SLEEP_BLACK_MS = 1500; // how long the screen stays black (no-clip fallback)
+
+function createBed() {
+  if (bed) { scene.remove(bed.group); bed = null; }
+  if (!model) return;
+  // bed 8m west of the spawn, on the open plaza; long axis along X,
+  // headboard at the west end. The sleeper faces east (+X, toward the
+  // spawn) and lies back, head landing at the west end — see sleepPos.
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const bx = sx - 8, bz = sz;
+  const by = groundHeight(bx, bz, 50);
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 });
+  const sheet = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.9 });
+  const blanket = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.9 });
+  const box = (w, h, d, m, x, y, z) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    g.add(b);
+    return b;
+  };
+  // frame + legs (frame top at 0.28m)
+  for (const dx of [-1.0, 1.0]) for (const dz of [-0.5, 0.5]) box(0.08, 0.15, 0.08, wood, dx, 0.075, dz);
+  box(2.2, 0.13, 1.2, wood, 0, 0.215, 0);
+  // headboard at the west end
+  box(0.08, 0.8, 1.2, wood, -1.06, 0.4, 0);
+  // mattress: white, top at ~0.46m
+  box(2.1, 0.18, 1.1, sheet, 0, 0.37, 0);
+  // pillow at the head (west) end
+  box(0.5, 0.1, 0.7, sheet, -0.75, 0.51, 0);
+  // blanket over the foot two-thirds
+  box(1.25, 0.06, 1.12, blanket, 0.4, 0.49, 0);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(bx, by, bz);
+  scene.add(g);
+  // sleep spot: feet at the foot (east) end, facing the spawn. The
+  // Lie_Down clip lies the body back along the bed, head to the west.
+  // (Assumption — see patch.md: tune sleepYaw / the +0.85 offset after
+  // the 19:00 Blender preview if the body lands across the bed.)
+  bed = {
+    group: g,
+    pos: new THREE.Vector3(bx, by, bz),
+    sleepPos: new THREE.Vector3(bx + 0.85, by, bz),
+    sleepYaw: Math.PI / 2 // facing +X (east, toward the spawn)
+  };
+}
+
+// Bed collision: same push-out as collideBench (the bed is axis-aligned,
+// no rotation, so the test is plain). Skipped while asleep (the sleeper
+// is meant to be on the bed) and while flying above it.
+function collideBed() {
+  if (!bed || sleepState !== 'awake') return;
+  if (charPos.y > bed.pos.y + 1.2) return; // flying over it
+  const hw = 1.1 + 0.4, hd = 0.6 + 0.4; // frame half-extents + character radius
+  const lx = charPos.x - bed.pos.x, lz = charPos.z - bed.pos.z;
+  if (Math.abs(lx) > hw || Math.abs(lz) > hd) return; // outside
+  const dx = hw - Math.abs(lx), dz = hd - Math.abs(lz);
+  if (dx <= dz) charPos.x = bed.pos.x + Math.sign(lx || 1) * hw;
+  else charPos.z = bed.pos.z + Math.sign(lz || 1) * hd;
+}
+
+// Health lives in the eating section (`health` + updateHealthUI()).
+// Defensive: if this block is ever merged before eating lands, fall
+// back to painting the bar full directly (the next eat/damage event
+// resyncs it from the real variable).
+function restoreHealthFull() {
+  if (typeof health !== 'undefined' && typeof updateHealthUI === 'function') {
+    health = (typeof HEALTH_MAX !== 'undefined') ? HEALTH_MAX : 100;
+    updateHealthUI();
+  } else {
+    const f = document.getElementById('health-fill');
+    const t = document.getElementById('health-text');
+    if (f) { f.style.width = '100%'; f.style.background = '#22c55e'; }
+    if (t) t.textContent = '體力 100/100';
+  }
+  showToast('睡了一覺，體力回滿了', 3000);
+}
+
+const sleepFadeEl = document.getElementById('sleep-fade');
+let sleepFadeTimers = []; // setTimeout ids for the no-clip fallback sequence
+function clearSleepFadeTimers() {
+  for (const t of sleepFadeTimers) clearTimeout(t);
+  sleepFadeTimers = [];
+}
+function sleepFadeFallback() {
+  // No clips yet: fade to black, hold, fade back — the sleep happens
+  // behind the fade. Every step re-checks sleepState so a cancel
+  // (mode switch / respawn) stops the sequence cold.
+  sleepFadeEl.style.opacity = '1';
+  sleepFadeTimers.push(setTimeout(() => {
+    if (sleepState !== 'lying') return;
+    sleepState = 'asleep';
+    sleepFadeTimers.push(setTimeout(() => {
+      if (sleepState !== 'asleep') return;
+      sleepFadeEl.style.opacity = '0';
+      sleepFadeTimers.push(setTimeout(() => {
+        if (sleepState !== 'asleep') return;
+        sleepState = 'awake';
+        restoreHealthFull();
+      }, SLEEP_FADE_MS + 100));
+    }, SLEEP_BLACK_MS));
+  }, SLEEP_FADE_MS + 100));
+}
+
+function trySleep() {
+  if (!bed) return;
+  if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return; // not while sitting down
+  if (carState !== 'none') return; // not while in the car
+  if (bikeState !== 'none') return; // not while riding
+  if (sleepState === 'awake') {
+    const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
+    if (d > SLEEP_RANGE) return;
+    if (bryce && bryce.oneShot) return; // wait for a move to finish
+    sleepState = 'lying';
+    // snap to the sleep spot (v1: no walk-up animation), like toggleSit
+    charPos.copy(bed.sleepPos);
+    charYaw = bed.sleepYaw;
+    charGroup.position.copy(charPos);
+    charGroup.rotation.y = charYaw;
+    if (bryce) {
+      bryce.group.position.copy(charPos);
+      bryce.group.rotation.y = charYaw;
+    }
+    // all-or-nothing: a partial clip set (e.g. Sleeping without
+    // Lie_Down) would strand the state machine, so it falls back too
+    if (bryce && bryce.clips['Lie_Down'] && bryce.clips['Sleeping'] && bryce.clips['Lie_StandUp']) {
+      if (!playOneShot('Lie_Down', () => {
+        if (sleepState !== 'lying') return; // cancelled (mode switch / reset)
+        sleepState = 'asleep';
+        playLoco('Sleeping');
+      })) sleepState = 'awake';
+    } else {
+      // clips not loaded yet (or no Bryce at all): the fade stands in
+      if (bryce) console.warn('Sleep clips not loaded yet — using fade fallback');
+      sleepFadeFallback();
+    }
+  } else if (sleepState === 'asleep') {
+    if (bryce && bryce.oneShot) return;
+    if (bryce && bryce.clips['Lie_StandUp'] && bryce.clips['Sleeping']) {
+      sleepState = 'waking';
+      if (!playOneShot('Lie_StandUp', () => {
+        if (sleepState !== 'waking') return; // cancelled
+        sleepState = 'awake';
+        playLoco('Idle');
+        restoreHealthFull();
+      })) sleepState = 'asleep';
+    }
+    // fade path: the sequence finishes on its own in ~3.7s; E during
+    // the black screen is ignored
+  }
+  // 'lying' / 'waking' transitions ignore E
+}
+
+function cancelSleep() {
+  // force back to awake (mode switch / respawn). The in-flight
+  // one-shot (if any) still finishes on its own, but its onDone is
+  // guarded by sleepState and returns early; updateWalk's playLoco('Idle')
+  // then takes over on the next frame. Any pending fade timers are
+  // cleared and the overlay is forced transparent.
+  if (sleepState === 'awake') return;
+  sleepState = 'awake';
+  clearSleepFadeTimers();
+  sleepFadeEl.style.opacity = '0';
+}
+
+const sleepPromptEl = document.getElementById('sleep-prompt');
+let lastSleepPrompt = null;
+function updateSleepPrompt() {
+  let text = '';
+  if (bed && mode === 'walk') {
+    if (sleepState === 'asleep' || sleepState === 'lying') text = '按 E 起床';
+    else if (sleepState === 'awake' && !flying && sitState === 'stand' && carState === 'none') {
+      const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
+      if (d <= SLEEP_RANGE) text = '按 E 睡覺';
+    }
+  }
+  if (text !== lastSleepPrompt) {
+    lastSleepPrompt = text;
+    sleepPromptEl.textContent = text;
+    sleepPromptEl.style.display = text ? 'block' : 'none';
+  }
+}
+
+// E-key dispatcher: one key, three interactions (bench / stall / bed,
+// plus waking up / standing up). Already-in-a-state exits win first;
+// otherwise the nearest in-range interaction wins, so E stays
+// deterministic even if two ranges ever overlap.
+function tryInteract() {
+  if (sleepState !== 'awake') { trySleep(); return; }
+  if (sitState !== 'stand') { toggleSit(); return; }
+  let best = null, bestD = Infinity;
+  if (bench) {
+    const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
+    if (d <= SIT_RANGE && d < bestD) { best = 'sit'; bestD = d; }
+  }
+  if (stall) {
+    const d = Math.hypot(charPos.x - stall.pos.x, charPos.z - stall.pos.z);
+    if (d <= EAT_RANGE && d < bestD) { best = 'eat'; bestD = d; }
+  }
+  if (bed) {
+    const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
+    if (d <= SLEEP_RANGE && d < bestD) { best = 'sleep'; bestD = d; }
+  }
+  if (best === 'sit') toggleSit();
+  else if (best === 'eat') eatFood();
+  else if (best === 'sleep') trySleep();
+}
+
+function updateDrive(dt) {
+  // arcade driving: W/S (or the touch joystick) throttle + brake/
+  // reverse, A/D (or joystick left/right) steering, Shift for the
+  // faster top speed. Building collision: collideCar() below, against
+  // the baked footprint grid (roads.json / buildings-collision.json).
+  const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
+  const maxSpeed = running ? CAR_MAX_FAST : CAR_MAX_SPEED;
+  // throttle: keyboard wins if held, else the touch joystick (push
+  // up = accelerate, push down = brake/reverse, analog like walking)
+  let throttle = 0;
+  if (keys['KeyW']) throttle = 1;
+  else if (keys['KeyS']) throttle = -1;
+  else if (joy.active) throttle = -joy.y;
+  if (throttle > 0) car.speed += CAR_ACCEL * throttle * dt;
+  else if (throttle < 0) {
+    // brake hard while moving forward, reverse once stopped
+    car.speed -= (car.speed > 0.5 ? CAR_BRAKE : CAR_ACCEL * 0.6) * -throttle * dt;
+  } else {
+    // coast down: rolling drag + air drag (never overshoots past 0)
+    car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), (0.5 + Math.abs(car.speed) * CAR_DRAG) * dt);
+  }
+  car.speed = THREE.MathUtils.clamp(car.speed, -CAR_MAX_REVERSE, maxSpeed);
+  // steering: needs motion (no turning at a standstill), reversed in reverse.
+  // Joystick: push right (joy.x > 0) turns right (yaw decreases toward -X).
+  const steer = THREE.MathUtils.clamp(
+    (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0) - (joy.active ? joy.x : 0), -1, 1);
+  const grip = Math.min(1, Math.abs(car.speed) / 4);
+  car.yaw += steer * 1.1 * grip * Math.sign(car.speed) * dt;
+  const fwd = new THREE.Vector3(Math.sin(car.yaw), 0, Math.cos(car.yaw));
+  car.pos.addScaledVector(fwd, car.speed * dt);
+  // stay inside the map (same bounds as the walker)
+  if (bounds) {
+    let hit = false;
+    if (car.pos.x < bounds.minX) { car.pos.x = bounds.minX; hit = true; }
+    if (car.pos.x > bounds.maxX) { car.pos.x = bounds.maxX; hit = true; }
+    if (car.pos.z < bounds.minZ) { car.pos.z = bounds.minZ; hit = true; }
+    if (car.pos.z > bounds.maxZ) { car.pos.z = bounds.maxZ; hit = true; }
+    if (hit) { car.speed = 0; showBoundaryToast(); }
+  }
+  // building collision first (stops the car at walls), then the ground:
+  // on a road, ease toward the smooth road surface; off-road, back to
+  // the terrain heightfield. The blend (plus the Y lerp below) keeps
+  // road entry/exit smooth instead of a step.
+  collideCar();
+  let gy = groundHeight(car.pos.x, car.pos.z, car.pos.y);
+  const rh = roadHeight(car.pos.x, car.pos.z);
+  if (rh !== null) {
+    lastRoadH = rh;
+    roadBlend = Math.min(1, roadBlend + dt * 8);
+  } else {
+    roadBlend = Math.max(0, roadBlend - dt * 8);
+  }
+  if (roadBlend > 0) gy = gy + (lastRoadH - gy) * roadBlend;
+  car.pos.y += (gy - car.pos.y) * Math.min(1, dt * 6);
+  car.group.position.copy(car.pos);
+  car.group.rotation.y = car.yaw;
+  // the character rides along: nav HUD + shadow focus track charPos
+  charPos.copy(car.pos);
+  charYaw = car.yaw;
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  if (bryce) {
+    bryce.group.position.copy(carLocalToWorld(CAR_SEAT_LOCAL));
+    bryce.group.rotation.y = car.yaw;
+    playLoco('Driving');
+  }
+  // chase camera: orbit with the walk camera's yaw (drag works while
+  // driving, so the player can swing to the side and see the driver),
+  // at a LOW pitch — the seated head-top (1.42m) is only 5cm below the
+  // roof underside, so a high camera looks over the roof and the driver
+  // is invisible (measured: the chase cam's sight line to the head hits
+  // the roof slab). drivePitch is local: camPitch itself is untouched,
+  // so the walk camera is unaffected after exiting.
+  const target = new THREE.Vector3(car.pos.x, car.pos.y + 2.2, car.pos.z);
+  const drivePitch = Math.min(camPitch, 0.10);
+  const off = new THREE.Vector3(
+    Math.sin(camYaw) * Math.cos(drivePitch),
+    Math.sin(drivePitch),
+    Math.cos(camYaw) * Math.cos(drivePitch)
+  ).multiplyScalar(camDist);
+  const desired = target.clone().add(off);
+  clampCameraToBuildings(target, desired);
+  camera.position.lerp(desired, Math.min(1, dt * 5));
+  camera.lookAt(target);
+}
+
+// ---------- motorcycle + riding (CMU 128_01 Riding / Sitting Idle fallback) ----------
+// One procedural motorcycle on the pier plaza, 10m south-east of the
+// spawn (x +8, z +10), facing the harbour (+Z, same as the spawn).
+// Clear of the bench (spawn south 6m), the car (spawn north 9m) and
+// the food stall (~8m east of spawn) — re-check the stall distance
+// at merge time (the stall section was still being written when this
+// patch was prepared). Riding is Bryce-only. State machine:
+// 'none' -> F near the bike -> 'mounting' (instant in v1: no get-on
+// clip exists in CMU/Mixamo, so the mount is a snap like sitting)
+// -> 'riding' (Riding loop, or Sitting Idle until the 19:00 retarget
+// lands; W/S throttle, A/D steering, lean into turns) -> F ->
+// 'dismounting' (instant snap to the ground beside the bike) ->
+// 'none'. Collision: collideBike() — one circle (r=0.6) against the
+// baked footprint grid. The EH98 Cafe Racer GLB swaps in later: keep
+// the same bike object shape and the same MOUNT/SEAT locals (verify
+// them against the GLB's seat/handlebar/footpeg empties).
+let bike = null; // { group, pos, yaw, speed, lean }
+let bikeState = 'none';
+const BIKE_RANGE = 3;
+const BIKE_ACCEL = 10, BIKE_BRAKE = 24, BIKE_DRAG = 0.9;
+const BIKE_MAX_SPEED = 24, BIKE_MAX_FAST = 38, BIKE_MAX_REVERSE = 5; // quicker + faster than the car (15/25 -> 19.5/32.5); tune by playtest
+const BIKE_LEAN_MAX = 0.3; // max roll into a turn (radians)
+const BIKE_MOUNT_LOCAL = new THREE.Vector3(0.8, 0, 0); // left side, like mounting a real bike
+// Feet at footpeg height (0.35m): the Sitting Idle fallback puts the
+// hips ~0.45m above the feet, so 0.35 + 0.45 = 0.80m = the seat top.
+// Re-verify against the real Riding clip at the 19:00 retarget: if
+// its hips sit at H above the clip's feet, this offset becomes (0.8 - H).
+const BIKE_SEAT_LOCAL = new THREE.Vector3(0, 0.35, -0.1);
+
+function bikeLocalToWorld(local) {
+  // rotate a bike-local offset by the bike's yaw, add the bike position
+  const c = Math.cos(bike.yaw), s = Math.sin(bike.yaw);
+  return new THREE.Vector3(
+    bike.pos.x + local.x * c + local.z * s,
+    bike.pos.y + local.y,
+    bike.pos.z - local.x * s + local.z * c
+  );
+}
+
+function createBike() {
+  if (bike) { scene.remove(bike.group); bike = null; }
+  if (!model) return;
+  // 10m south-east of the spawn on the open plaza (17m+ clear of
+  // buildings): 8m east, 10m south of the spawn point
+  const sx = SPAWN_RAW.x - modelCenter.x + 8;
+  const sz = SPAWN_RAW.z - modelCenter.z + 10;
+  const by = groundHeight(sx, sz, 50);
+  const g = new THREE.Group();
+  const paint = new THREE.MeshStandardMaterial({ color: 0x8a2020, roughness: 0.35, metalness: 0.6 });
+  const frame = new THREE.MeshStandardMaterial({ color: 0x2f3336, roughness: 0.5, metalness: 0.6 });
+  const tyre = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+  const seatMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+  const chrome = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.4, metalness: 0.7 });
+  const light = new THREE.MeshStandardMaterial({ color: 0xfff6c9, roughness: 0.3, emissive: 0x555533 });
+  const tail = new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.3, emissive: 0x550000 });
+  const box = (w, h, d, m, x, y, z, rx = 0) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    b.rotation.x = rx;
+    g.add(b);
+    return b;
+  };
+  box(0.16, 0.22, 1.3, frame, 0, 0.55, 0);          // frame
+  box(0.34, 0.26, 0.5, paint, 0, 0.78, 0.15);       // fuel tank
+  box(0.3, 0.1, 0.55, seatMat, 0, 0.8, -0.35);      // seat (top 0.85m)
+  box(0.2, 0.05, 0.4, paint, 0, 0.68, 0.75);        // front fender
+  box(0.16, 0.12, 0.06, light, 0, 0.82, 0.86);      // headlight
+  box(0.12, 0.06, 0.04, tail, 0, 0.72, -0.95);      // tail light
+  // handlebar + steering column (column leans back toward the rider)
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.6, 8), chrome);
+  bar.rotation.z = Math.PI / 2;
+  bar.position.set(0, 1.0, 0.55);
+  g.add(bar);
+  const column = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8), frame);
+  column.rotation.x = -0.4;
+  column.position.set(0, 0.75, 0.62);
+  g.add(column);
+  // exhaust pipe, right side
+  const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 10), chrome);
+  exhaust.rotation.x = Math.PI / 2;
+  exhaust.position.set(0.14, 0.32, -0.3);
+  g.add(exhaust);
+  // wheels: 0.33m radius, 1.5m wheelbase (front +0.75, rear -0.75)
+  const wheelGeo = new THREE.CylinderGeometry(0.33, 0.33, 0.12, 16);
+  const hubGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.14, 12);
+  for (const wz of [0.75, -0.75]) {
+    const w = new THREE.Mesh(wheelGeo, tyre);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(0, 0.33, wz);
+    g.add(w);
+    const hub = new THREE.Mesh(hubGeo, chrome);
+    hub.rotation.z = Math.PI / 2;
+    hub.position.set(0, 0.33, wz);
+    g.add(hub);
+  }
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(sx, by, sz);
+  g.rotation.y = 0; // facing south (+Z), same as the spawn
+  scene.add(g);
+  bike = { group: g, pos: new THREE.Vector3(sx, by, sz), yaw: 0, speed: 0, lean: 0 };
+}
+
+function tryBike() {
+  if (!bryce || !bike) return; // Bryce only
+  if (mode !== 'walk' || flying) return;
+  if (sitState !== 'stand') return; // can't ride while sitting down
+  if (carState !== 'none') return; // can't ride while in the car
+  if (bikeState === 'none') {
+    const d = Math.hypot(charPos.x - bike.pos.x, charPos.z - bike.pos.z);
+    if (d > BIKE_RANGE) return;
+    if (bryce.oneShot) return; // wait for a move (e.g. punch) to finish
+    // snap beside the bike (v1: no mount animation — no get-on clip
+    // exists in CMU/Mixamo; the mount is a snap like sitting)
+    bikeState = 'mounting';
+    const mount = bikeLocalToWorld(BIKE_MOUNT_LOCAL);
+    charPos.set(mount.x, groundHeight(mount.x, mount.z, bike.pos.y), mount.z);
+    charYaw = bike.yaw;
+    charGroup.position.copy(charPos);
+    charGroup.rotation.y = charYaw;
+    bryce.group.position.copy(charPos);
+    bryce.group.rotation.y = charYaw;
+    bryce.group.rotation.z = 0;
+    bikeState = 'riding';
+    playLoco(bryce.clips['Riding'] ? 'Riding' : 'Sitting Idle');
+  } else if (bikeState === 'riding') {
+    if (bryce.oneShot) return;
+    bikeState = 'dismounting';
+    bike.speed = 0;
+    exitBikeToGround();
+  }
+  // 'mounting' / 'dismounting' are instant in v1 (no clips) — the
+  // states exist so a future mount/dismount clip can hook in here,
+  // mirroring the car's 'entering' / 'exiting'.
+}
+
+function exitBikeToGround() {
+  // Bryce back on the ground beside the bike, walk mode resumes.
+  // Reset the lean on BOTH groups: updateWalk only ever sets
+  // rotation.y, so a leftover rotation.z would tilt the rider forever.
+  const mount = bikeLocalToWorld(BIKE_MOUNT_LOCAL);
+  charPos.set(mount.x, groundHeight(mount.x, mount.z, bike.pos.y), mount.z);
+  charYaw = bike.yaw;
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  bryce.group.position.copy(charPos);
+  bryce.group.rotation.y = charYaw;
+  bryce.group.rotation.z = 0;
+  bike.lean = 0;
+  bike.group.rotation.z = 0;
+  bikeState = 'none';
+  playLoco('Idle');
+}
+
+function cancelBike() {
+  // force off the bike without the animation (mode switch / respawn).
+  // Same shape as cancelCar: the in-flight state is reset here and
+  // updateWalk's playLoco('Idle') takes over on the next frame.
+  if (bikeState === 'none') return;
+  if (bike) exitBikeToGround(); // also resets bikeState + plays Idle
+  else bikeState = 'none';
+}
+
+const bikePromptEl = document.getElementById('bike-prompt');
+let lastBikePrompt = null;
+function updateBikePrompt() {
+  let text = '';
+  if (bike && bryce && mode === 'walk') {
+    if (bikeState === 'riding') text = '按 F 下車'; // 'mounting' is a transition: F is ignored then, so no prompt (test 10)
+    else if (bikeState === 'none' && !flying) {
+      const d = Math.hypot(charPos.x - bike.pos.x, charPos.z - bike.pos.z);
+      if (d <= BIKE_RANGE) text = '按 F 騎車';
+    }
+  }
+  if (text !== lastBikePrompt) {
+    lastBikePrompt = text;
+    bikePromptEl.textContent = text;
+    bikePromptEl.style.display = text ? 'block' : 'none';
+  }
+}
+
+// Bike collision: one circle at the bike centre (v1: the nose/tail can
+// clip a wall slightly at an angle — the bike is 2.2m long, the circle
+// is 1.2m across). A push stops the bike dead (same as the car).
+function collideBike() {
+  if (!footGrid || !bike) return;
+  if (collideFootprint(bike.pos, 0.6)) bike.speed = 0;
+}
+
+function updateRide(dt) {
+  // arcade riding, mirroring updateDrive: W/S (or the touch joystick)
+  // throttle + brake/reverse, A/D (or joystick left/right) steering,
+  // Shift for the faster top speed. The bike leans into turns
+  // (rotation.z on the bike group AND the rider — Euler order XYZ
+  // applies the Z roll around the local forward axis before the Y
+  // heading, which is exactly the lean we want).
+  const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
+  const maxSpeed = running ? BIKE_MAX_FAST : BIKE_MAX_SPEED;
+  let throttle = 0;
+  if (keys['KeyW']) throttle = 1;
+  else if (keys['KeyS']) throttle = -1;
+  else if (joy.active) throttle = -joy.y;
+  if (throttle > 0) bike.speed += BIKE_ACCEL * throttle * dt;
+  else if (throttle < 0) {
+    // brake hard while moving forward, reverse once stopped
+    bike.speed -= (bike.speed > 0.5 ? BIKE_BRAKE : BIKE_ACCEL * 0.6) * -throttle * dt;
+  } else {
+    // coast down: rolling drag + air drag (never overshoots past 0)
+    bike.speed -= Math.sign(bike.speed) * Math.min(Math.abs(bike.speed), (0.5 + Math.abs(bike.speed) * BIKE_DRAG) * dt);
+  }
+  bike.speed = THREE.MathUtils.clamp(bike.speed, -BIKE_MAX_REVERSE, maxSpeed);
+  // steering: needs motion (no turning at a standstill), reversed in reverse.
+  // Bikes turn quicker than the car (1.3 vs 1.1) — first guess, tune by playtest.
+  const steer = THREE.MathUtils.clamp(
+    (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0) - (joy.active ? joy.x : 0), -1, 1);
+  const grip = Math.min(1, Math.abs(bike.speed) / 4);
+  bike.yaw += steer * 1.3 * grip * Math.sign(bike.speed) * dt;
+  // lean: turning left (steer > 0) leans the top toward +X, the left
+  // side when facing +Z — that is a negative rotation.z. No lean at a
+  // standstill (grip = 0); eased so it doesn't snap.
+  const targetLean = -steer * BIKE_LEAN_MAX * grip;
+  bike.lean += (targetLean - bike.lean) * Math.min(1, dt * 6);
+  const fwd = new THREE.Vector3(Math.sin(bike.yaw), 0, Math.cos(bike.yaw));
+  bike.pos.addScaledVector(fwd, bike.speed * dt);
+  // stay inside the map (same bounds as the walker and the car)
+  if (bounds) {
+    let hit = false;
+    if (bike.pos.x < bounds.minX) { bike.pos.x = bounds.minX; hit = true; }
+    if (bike.pos.x > bounds.maxX) { bike.pos.x = bounds.maxX; hit = true; }
+    if (bike.pos.z < bounds.minZ) { bike.pos.z = bounds.minZ; hit = true; }
+    if (bike.pos.z > bounds.maxZ) { bike.pos.z = bounds.maxZ; hit = true; }
+    if (hit) { bike.speed = 0; showBoundaryToast(); }
+  }
+  // building collision first (stops the bike at walls), then the ground:
+  // on a road, ease toward the smooth road surface; off-road, back to
+  // the terrain heightfield. roadBlend/lastRoadH are shared with the
+  // car — only one vehicle drives at a time, and the blend re-derives
+  // from the current position every frame, so sharing is safe.
+  collideBike();
+  let gy = groundHeight(bike.pos.x, bike.pos.z, bike.pos.y);
+  const rh = roadHeight(bike.pos.x, bike.pos.z);
+  if (rh !== null) {
+    lastRoadH = rh;
+    roadBlend = Math.min(1, roadBlend + dt * 8);
+  } else {
+    roadBlend = Math.max(0, roadBlend - dt * 8);
+  }
+  if (roadBlend > 0) gy = gy + (lastRoadH - gy) * roadBlend;
+  bike.pos.y += (gy - bike.pos.y) * Math.min(1, dt * 6);
+  bike.group.position.copy(bike.pos);
+  bike.group.rotation.set(0, bike.yaw, bike.lean);
+  // the character rides along: nav HUD + shadow focus track charPos
+  charPos.copy(bike.pos);
+  charYaw = bike.yaw;
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  if (bryce) {
+    bryce.group.position.copy(bikeLocalToWorld(BIKE_SEAT_LOCAL));
+    bryce.group.rotation.set(0, bike.yaw, bike.lean);
+    playLoco(bryce.clips['Riding'] ? 'Riding' : 'Sitting Idle');
+  }
+  // chase camera: behind the bike at the walk-mode distance (wheel works)
+  const target = new THREE.Vector3(bike.pos.x, bike.pos.y + 2.2, bike.pos.z);
+  const desired = target.clone().addScaledVector(fwd, -camDist).add(new THREE.Vector3(0, 2.5, 0));
+  clampCameraToBuildings(target, desired);
+  camera.position.lerp(desired, Math.min(1, dt * 5));
+  camera.lookAt(target);
+}
+
+// F is shared by the car and the bike: if already driving/riding, F
+// exits that vehicle; otherwise F enters whichever vehicle is nearer
+// (both in range -> the nearer one wins). The keydown handler calls
+// this instead of toggleCar; the contextual HUD button dispatches
+// through doContextAction instead (same exit-first, nearest-wins rule).
+function toggleVehicle() {
+  if (carState === 'driving' || carState === 'entering' || carState === 'exiting') { toggleCar(); return; }
+  if (bikeState === 'riding' || bikeState === 'mounting' || bikeState === 'dismounting') { tryBike(); return; }
+  // neither vehicle occupied: nearest in-range vehicle wins
+  let carD = Infinity, bikeD = Infinity;
+  if (car && bryce) carD = Math.hypot(charPos.x - car.pos.x, charPos.z - car.pos.z);
+  if (bike && bryce) bikeD = Math.hypot(charPos.x - bike.pos.x, charPos.z - bike.pos.z);
+  if (carD <= CAR_RANGE && carD <= bikeD) toggleCar();
+  else if (bikeD <= BIKE_RANGE) tryBike();
+  // out of range of both: nothing (each toggle has its own range check)
+}
+
+// ---------- one contextual interaction button (2026-11-23) ----------
+// The five interaction buttons (eat / sit / sleep / car / bike) are
+// merged into one: it shows only the nearest available interaction —
+// or the exit action when already sitting / asleep / driving /
+// riding — and hides when nothing is in range. Priority mirrors the
+// E/F key dispatchers (tryInteract / toggleVehicle): exits first,
+// then nearest in range across all five (the ranges never overlap
+// in practice, but nearest-wins keeps it deterministic if they do).
+// The per-system prompt lines ("按 E 坐下" etc.) stay as keyboard
+// hints; this button is the touch/mouse equivalent.
+const interactRowEl = document.getElementById('interact-row');
+const interactBtnEl = document.getElementById('interactBtn');
+let ctxAction = null; // action the button currently offers (null = hidden)
+let lastCtxAction = undefined; // last action written to the DOM
+let lastModeLabel = null; // last mode-toggle label written to the DOM
+const CTX_LABELS = {
+  wake: '☀️ 起床 (E)',
+  stand: '🧍 站起來 (E)',
+  'exit-car': '🚶 下車 (F)',
+  'exit-bike': '🚶 下車 (F)',
+  sit: '🪑 坐下 (E)',
+  eat: '🍜 吃飯 (E)',
+  sleep: '🛏️ 睡覺 (E)',
+  car: '🚗 上車 (F)',
+  bike: '🏍️ 騎車 (F)'
+};
+function updateContextButton() {
+  let action = null;
+  if (mode === 'walk' && !inRoom) {
+    // exits first (same order as tryInteract / toggleVehicle) — only
+    // steady states offer an exit: during a 1s transition ('sitting' /
+    // 'standing' / 'entering' / 'exiting' / 'mounting') the handlers
+    // silently ignore input, so showing the button then is a lie that
+    // makes the user hammer a dead button (test 10)
+    if (sleepState !== 'awake') action = 'wake';
+    else if (sitState === 'seated') action = 'stand';
+    else if (carState === 'driving') action = 'exit-car';
+    else if (bikeState === 'riding') action = 'exit-bike';
+    else if (!flying) {
+      let bestD = Infinity;
+      if (bench && bryce) {
+        const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
+        if (d <= SIT_RANGE && d < bestD) { action = 'sit'; bestD = d; }
+      }
+      if (stall) {
+        const d = Math.hypot(charPos.x - stall.pos.x, charPos.z - stall.pos.z);
+        if (d <= EAT_RANGE && d < bestD) { action = 'eat'; bestD = d; }
+      }
+      if (bed) {
+        const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
+        if (d <= SLEEP_RANGE && d < bestD) { action = 'sleep'; bestD = d; }
+      }
+      if (car && bryce && carState === 'none') {
+        const d = Math.hypot(charPos.x - car.pos.x, charPos.z - car.pos.z);
+        if (d <= CAR_RANGE && d < bestD) { action = 'car'; bestD = d; }
+      }
+      if (bike && bryce && bikeState === 'none') {
+        const d = Math.hypot(charPos.x - bike.pos.x, charPos.z - bike.pos.z);
+        if (d <= BIKE_RANGE && d < bestD) { action = 'bike'; bestD = d; }
+      }
+    }
+  }
+  ctxAction = action;
+  // mode label: driving / riding are states, not modes — the toggle
+  // button only knows walk/fly, so it lies while driving (test 10)
+  const modeLabel = carState === 'driving' ? '模式：開車'
+    : bikeState === 'riding' ? '模式：騎車'
+    : '模式：' + (mode === 'walk' ? '步行' : '飛行');
+  if (modeLabel !== lastModeLabel) {
+    lastModeLabel = modeLabel;
+    document.getElementById('modeToggle').textContent = modeLabel;
+  }
+  if (action === lastCtxAction) return;
+  lastCtxAction = action;
+  if (!action) { interactRowEl.style.display = 'none'; return; }
+  interactRowEl.style.display = '';
+  interactBtnEl.textContent = CTX_LABELS[action];
+}
+
+function doContextAction() {
+  // dispatch on the action the button currently shows; every target
+  // re-checks its own range/guards, so a stale label is harmless
+  switch (ctxAction) {
+    case 'wake': trySleep(); break;
+    case 'stand': toggleSit(); break;
+    case 'exit-car': toggleCar(); break;
+    case 'exit-bike': tryBike(); break;
+    case 'sit': toggleSit(); break;
+    case 'eat': eatFood(); break;
+    case 'sleep': trySleep(); break;
+    case 'car': toggleCar(); break;
+    case 'bike': tryBike(); break;
+  }
+}
+interactBtnEl.addEventListener('click', doContextAction);
+
+// ---------- pier mid-section deck (fills the data gap in I35846) ----------
+// The government pier model covers the shore end and the tip only; the
+// middle (Blender Y -520..-560, centreline X 270) has no deck at all,
+// so walking south along the pier drops you into the sea. This patch
+// is one concrete box over the gap. Coordinates are converted from the
+// raw (pre-recenter) frame exactly like the spawn: scene X/Z = raw -
+// modelCenter, scene Y = raw + model.position.y (frameModel shifts the
+// model so its bbox minimum sits at y=0). The patch is 44m long (2m
+// overlap each end, so a few metres of uncertainty in the real deck's
+// edge can't leave a gap) and its top sits 2cm below the tip deck
+// (5.78m raw) so the overlap shows the real deck, not a z-fight.
+let pierDeck = null; // { mesh, entry }
+function createPierDeck() {
+  if (pierDeck) {
+    scene.remove(pierDeck.mesh);
+    const i = raycastTargets.indexOf(pierDeck.entry);
+    if (i >= 0) raycastTargets.splice(i, 1);
+    pierDeck = null;
+  }
+  if (!model) return;
+  const dx = 270 - modelCenter.x;
+  const dz = 540 - modelCenter.z; // gap centre, raw z 520..560
+  const topY = 5.76 + model.position.y;
+  const deck = new THREE.Mesh(
+    new THREE.BoxGeometry(11, 0.5, 44),
+    new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 0.9 })
+  );
+  deck.position.set(dx, topY - 0.25, dz);
+  deck.castShadow = true;
+  deck.receiveShadow = true;
+  scene.add(deck);
+  deck.updateMatrixWorld(true);
+  // walkable: add it to the ground raycast targets (same shape as
+  // buildRaycastTargets entries), so groundHeight returns the deck
+  // top instead of the seabed when the character is on it
+  const box = new THREE.Box3().setFromObject(deck);
+  const entry = { mesh: deck,
+    minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z };
+  raycastTargets.push(entry);
+  pierDeck = { mesh: deck, entry };
+}
+
+// ---------- personal room v1 (PATCH FRAGMENT — not a module) ----------
+// Paste into harbour-city-demo.html's module script, BEFORE
+// `function updateWalk(dt) {` (see patch.md step R1). It references the
+// main file's globals (THREE, scene, charPos, charYaw, camYaw, camPitch,
+// camDist, mode, flying, sitState, carState, model, SPAWN_RAW,
+// modelCenter, groundHeight, showToast, spawnCharacter, updateWalkCamera,
+// closeSettings, setPauseMenu, fallStartY) and adds the names listed in
+// patch.md. Entry/exit is ONLY via the settings button (#set-room, see
+// patch.md step R2) — there is no portal on the map and no E-key trigger
+// (user decision 2026-11-23).
+//
+// The room floats at ROOM_Y above the spawn (same x/z): a pure Y
+// teleport, no new XZ math, no clash with the outer city, the ferry
+// (y≈1.35) or the 160m fog walls. It starts invisible — the player
+// outside never sees a floating box; enterRoom() shows it, exitRoom()
+// hides it again. The room is NOT Bryce-only: the procedural fallback
+// character can enter too (teleport + walk works for both).
+
+const ROOM_Y = 300; // world Y of the room floor (above the 160m fog walls)
+const ROOM_HALF_X = 4.4; // walkable half-width (walls at ±5.0, 0.6m margin)
+const ROOM_HALF_Z = 3.4; // walkable half-depth (walls at ±4.0, 0.6m margin)
+
+let inRoom = false;
+let roomGroup = null;
+let roomCenter = null; // THREE.Vector3, world coords of the room centre at floor level
+
+function createRoom() {
+  if (roomGroup) { scene.remove(roomGroup); roomGroup = null; roomCenter = null; }
+  if (!model) return;
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const g = new THREE.Group();
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.95 });
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x9c7a4d, roughness: 0.8 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.9 });
+  const teal = new THREE.MeshStandardMaterial({ color: 0x2dd4bf, roughness: 0.9 });
+  const paleBlue = new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.9 });
+  const rugMat = new THREE.MeshStandardMaterial({ color: 0xc08497, roughness: 1.0 });
+  const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2f3336, roughness: 0.5, metalness: 0.6 });
+  const box = (w, h, d, m, x, y, z) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    g.add(b);
+    return b;
+  };
+  // shell: floor 10x8, walls 3m, ceiling; door gap 1.2w x 2.2h in the south wall
+  box(10, 0.2, 8, floorMat, 0, -0.1, 0);
+  box(10.4, 3, 0.2, wallMat, 0, 1.5, -4.1); // north
+  box(4.6, 3, 0.2, wallMat, -2.8, 1.5, 4.1); // south, left of door
+  box(4.6, 3, 0.2, wallMat, 2.8, 1.5, 4.1); // south, right of door
+  box(1.2, 0.8, 0.2, wallMat, 0, 2.6, 4.1); // lintel above the door
+  box(0.2, 3, 8, wallMat, -5.1, 1.5, 0); // west
+  box(0.2, 3, 8, wallMat, 5.1, 1.5, 0); // east
+  box(10.4, 0.2, 8.4, wallMat, 0, 3.1, 0); // ceiling
+  // door frame + closed door panel (visual only — the exit is the
+  // settings button, not a walk-through; without the panel the gap
+  // was an open hole onto the city 300m below)
+  box(0.12, 2.2, 0.12, wood, -0.66, 1.1, 4.05);
+  box(0.12, 2.2, 0.12, wood, 0.66, 1.1, 4.05);
+  box(1.44, 0.12, 0.12, wood, 0, 2.26, 4.05);
+  box(1.2, 2.2, 0.06, wood, 0, 1.1, 4.05); // door panel
+  box(0.09, 0.09, 0.09, darkMetal, 0.45, 1.05, 4.0); // knob
+  // window: bright unlit plane on the north wall (opaque — no view of
+  // the map 300m below) + frame + mullions
+  const win = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 1.4),
+    new THREE.MeshBasicMaterial({ color: 0xbfe3ff })
+  );
+  win.position.set(0, 1.8, -3.98);
+  g.add(win);
+  box(2.6, 0.08, 0.06, wood, 0, 2.54, -3.97);
+  box(2.6, 0.08, 0.06, wood, 0, 1.06, -3.97);
+  box(0.08, 1.56, 0.06, wood, -1.24, 1.8, -3.97);
+  box(0.08, 1.56, 0.06, wood, 1.24, 1.8, -3.97);
+  box(0.05, 1.4, 0.04, wood, 0, 1.8, -3.96);
+  box(2.4, 0.05, 0.04, wood, 0, 1.8, -3.96);
+  // bed (visual only — the Sleeping clip + sleep trigger are separate future work)
+  box(1.2, 0.3, 2.2, wood, -3.6, 0.15, -2.6);
+  box(1.1, 0.18, 2.1, white, -3.6, 0.39, -2.6);
+  box(0.9, 0.12, 0.5, paleBlue, -3.6, 0.52, -3.4);
+  box(1.12, 0.06, 1.2, teal, -3.6, 0.5, -2.2);
+  // table + chair (north-east corner)
+  box(1.6, 0.06, 0.8, wood, 3.6, 0.75, -2.8);
+  for (const dx of [-0.75, 0.75]) for (const dz of [-0.35, 0.35]) {
+    box(0.05, 0.75, 0.05, darkMetal, 3.6 + dx, 0.375, -2.8 + dz);
+  }
+  box(0.45, 0.05, 0.45, wood, 3.6, 0.45, -1.9);
+  box(0.45, 0.5, 0.05, wood, 3.6, 0.75, -2.14);
+  box(0.05, 0.45, 0.05, darkMetal, 3.6, 0.225, -1.9);
+  // rug
+  box(2.4, 0.02, 1.6, rugMat, 0, 0.01, -0.5);
+  // the ceiling blocks the sun, so the room needs its own light
+  // (intensity is a first guess — tune after the first visual check)
+  const lamp = new THREE.PointLight(0xffe6b8, 40, 15, 1.8);
+  lamp.position.set(0, 2.7, 0);
+  g.add(lamp);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(sx, ROOM_Y, sz);
+  g.visible = false; // shown only while the player is inside
+  scene.add(g);
+  roomGroup = g;
+  roomCenter = new THREE.Vector3(sx, ROOM_Y, sz);
+}
+
+function enterRoom() {
+  if (inRoom || !model || !roomGroup) return false;
+  if (mode !== 'walk' || flying) return false;
+  if (sitState !== 'stand' || carState !== 'none' || bikeState !== 'none' || sleepState !== 'awake') return false;
+  fallStartY = null; // a teleport is not a fall
+  inRoom = true;
+  roomGroup.visible = true;
+  // spawn at the room centre, facing north (into the room, toward the bed/window)
+  charPos.set(roomCenter.x, ROOM_Y, roomCenter.z);
+  charYaw = Math.PI;
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  if (bryce) { bryce.group.position.copy(charPos); bryce.group.rotation.y = charYaw; }
+  _prevPos.copy(charPos); // so the speedometer doesn't spike on teleport
+  // small room: pull the camera in and keep it low (the wheel/pitch
+  // clamps plus the position clamp in updateWalkCamera keep it inside)
+  camYaw = 0; // camera south of the character, looking north into the room
+  camPitch = 0.2;
+  camDist = 3;
+  updateWalkCamera();
+  syncRoomButton();
+  showToast('回到房間', 2000);
+  return true;
+}
+
+function exitRoom() {
+  if (!inRoom) return false;
+  inRoom = false;
+  if (roomGroup) roomGroup.visible = false;
+  syncRoomButton();
+  showToast('離開房間', 1500);
+  spawnCharacter(); // back to the pier plaza (also resets the camera)
+  return true;
+}
+
+function toggleRoom() {
+  // settings-button trigger: returns true if it acted.
+  if (!model || !roomGroup) {
+    showToast('先開始遊戲，載入地圖後才能進入房間', 2500);
+    return false;
+  }
+  if (inRoom) return exitRoom();
+  if (!enterRoom()) {
+    showToast('現在不能進入房間', 2000);
+    return false;
+  }
+  return true;
+}
+
+function clampToRoom() {
+  if (!roomCenter) return;
+  charPos.x = THREE.MathUtils.clamp(charPos.x, roomCenter.x - ROOM_HALF_X, roomCenter.x + ROOM_HALF_X);
+  charPos.z = THREE.MathUtils.clamp(charPos.z, roomCenter.z - ROOM_HALF_Z, roomCenter.z + ROOM_HALF_Z);
+  // furniture collision: bed + table as AABBs (room-local coords,
+  // expanded by the 0.4m player radius) — without this Bryce walks onto
+  // the mattress (test 9). Push out along the axis of least penetration.
+  const lx = charPos.x - roomCenter.x, lz = charPos.z - roomCenter.z;
+  const boxes = [
+    [-4.6, -2.6, -4.1, -1.1], // bed (frame 1.2 x 2.2 at -3.6, -2.6)
+    [2.4, 4.8, -3.6, -2.0], // table (1.6 x 0.8 at 3.6, -2.8)
+  ];
+  for (const [minX, maxX, minZ, maxZ] of boxes) {
+    if (lx < minX || lx > maxX || lz < minZ || lz > maxZ) continue;
+    const dxMin = lx - minX, dxMax = maxX - lx, dzMin = lz - minZ, dzMax = maxZ - lz;
+    const m = Math.min(dxMin, dxMax, dzMin, dzMax);
+    if (m === dxMin) charPos.x = roomCenter.x + minX;
+    else if (m === dxMax) charPos.x = roomCenter.x + maxX;
+    else if (m === dzMin) charPos.z = roomCenter.z + minZ;
+    else charPos.z = roomCenter.z + maxZ;
+    break;
+  }
+  // the push-out can overshoot the walls (bed/table boxes extend past
+  // the walkable margin), so clamp again
+  charPos.x = THREE.MathUtils.clamp(charPos.x, roomCenter.x - ROOM_HALF_X, roomCenter.x + ROOM_HALF_X);
+  charPos.z = THREE.MathUtils.clamp(charPos.z, roomCenter.z - ROOM_HALF_Z, roomCenter.z + ROOM_HALF_Z);
+}
+
+function syncRoomButton() {
+  const btn = document.getElementById('set-room');
+  if (btn) btn.textContent = inRoom ? '離開房間' : '進入個人房間';
+}
+
+// settings button: enter/exit, then drop straight into the game —
+// closeSettings reopens the pause menu, so close that too instead of
+// leaving the player behind two overlays.
+document.getElementById('set-room').addEventListener('click', () => {
+  if (!toggleRoom()) return; // guards failed (toast already shown); stay in settings
+  closeSettings();
+  setPauseMenu(false);
+});
+
 function updateWalk(dt) {
+  // driving: the car has its own update (movement, ground, camera)
+  if (carState === 'driving') { updateDrive(dt); return; }
+  if (bikeState === 'riding') { updateRide(dt); return; }
   // movement relative to the camera's view direction
   const fwd = new THREE.Vector3(charPos.x - camera.position.x, 0, charPos.z - camera.position.z);
   if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
@@ -1294,22 +4165,33 @@ function updateWalk(dt) {
     move.addScaledVector(right, joy.x);
   }
   moving = move.lengthSq() > 0;
-  // martial arts: plant the feet while a move is playing
+  // movement lock: the procedural fallback plants its feet while a move
+  // plays, and non-attack one-shots (car enter/exit, sit/stand, drinking,
+  // sleep transitions) lock movement too — the one-shot's root motion
+  // does the moving, not the keys. ATTACK one-shots (Punching/Kicking)
+  // do NOT lock movement: Bryce can walk while attacking (走A). v1
+  // limitation: the attack clip replaces the walk clip, so he glides
+  // (moves without leg animation) for the 1-1.5s of the attack;
+  // layered upper/lower-body animation is a future improvement.
   const pose = actionPose(clock.elapsedTime);
-  if (pose || (bryce && bryce.oneShot)) { move.set(0, 0, 0); moving = false; }
+  if (pose || (bryce && bryce.oneShot && !isAttackOneShot()) || sitState !== 'stand' || carState !== 'none' || sleepState !== 'awake' || bikeState !== 'none') { move.set(0, 0, 0); moving = false; }
   const running = keys['ShiftLeft'] || keys['ShiftRight'] || touchRun;
   const wantFly = keys['Space'] || touchFlyUp;
   const wantDown = keys['ControlLeft'] || keys['ControlRight'] || touchFlyDown;
-  // vertical: hold Space to fly up, Ctrl to descend; otherwise hover
+  // vertical: hold Space to fly up, Ctrl to descend; otherwise hover.
+  // No flying while seated or in the car.
   let vy = 0;
-  if (wantFly) { flying = true; vy = 12; }
+  if (wantFly && !inRoom && sitState === 'stand' && carState === 'none' && bikeState === 'none' && sleepState === 'awake') { flying = true; vy = 12; }
   if (wantDown) { vy = -12; }
   if (moving) {
     // analog stick: slight push = slow walk (keyboard input is always
     // magnitude >= 1, so it stays full speed)
     const mag = Math.min(1, move.length());
     move.normalize();
-    const speed = (flying ? (running ? 60 : 30) : (running ? 25 : 6)) * mag;
+    // food-stall speed buff: run speed x1.2 while it lasts (walk speed
+    // and flight are unaffected)
+    const runSpeed = (clock.elapsedTime < speedBuffUntil) ? 25 * SPEED_BUFF_MULT : 25;
+    const speed = (flying ? (running ? 60 : 30) : (running ? runSpeed : 6)) * mag;
     charPos.addScaledVector(move, speed * dt);
     // face the movement direction (smooth turn)
     const targetYaw = Math.atan2(move.x, move.z);
@@ -1322,16 +4204,58 @@ function updateWalk(dt) {
     swingPhase *= 0.9;
   }
   // stay inside the map; hitting the edge shows the fog-of-war message
-  clampToBounds();
-  // vertical + ground
-  if (flying) {
+  // (in the personal room: clamp to the room instead, and skip the
+  // map-only collisions — the bench/stall/bed/footprint are all outside)
+  if (inRoom) clampToRoom();
+  else {
+    clampToBounds();
+    // don't walk through the bench (push-out, see collideBench)
+    collideBench();
+    // don't walk through the food stall (push-out, see collideStall)
+    collideStall();
+    // don't walk through the bed (push-out, see collideBed)
+    collideBed();
+  }
+  // don't walk through buildings (footprint grid; skipped while flying
+  // — fly mode is for aerial inspection — and while sitting, asleep, or getting
+  // in/out of the car, so the push-out never fights an animation)
+  if (!inRoom && !flying && sitState === 'stand' && carState === 'none' && bikeState === 'none' && sleepState === 'awake') collideFootprint(charPos, 0.4);
+  // vertical + ground (gy is reused by the fall check below, so it is
+  // hoisted — the groundHeight calls keep their original order and refY)
+  let gy;
+  if (inRoom) {
+    // personal room: flat floor at ROOM_Y, no map ground, no flying
+    gy = ROOM_Y;
+    charPos.y = ROOM_Y;
+    flying = false;
+  } else if (flying) {
     charPos.y += vy * dt;
-    const gy = groundHeight(charPos.x, charPos.z, charPos.y);
+    gy = groundHeight(charPos.x, charPos.z, charPos.y);
     if (charPos.y <= gy) { charPos.y = gy; if (vy <= 0) flying = false; }
   } else {
-    const gy = groundHeight(charPos.x, charPos.z, charPos.y);
+    gy = groundHeight(charPos.x, charPos.z, charPos.y);
     const rate = gy < charPos.y ? 12 : 6;
     charPos.y += (gy - charPos.y) * Math.min(1, dt * rate);
+  }
+  // fall damage: on foot in walk mode only (not flying, sitting or
+  // driving). The walker is ground-lerped, not ballistic, so
+  // "airborne" means the ground fell away underfoot — a podium edge —
+  // faster than the lerp can follow. Takeoff height is the highest
+  // point while airborne; landing more than 8m below it hurts.
+  // Mode-switch teleports and respawns reset the tracker (see
+  // spawnCharacter), so they never count as falls.
+  if (!inRoom && !flying && sitState === 'stand' && carState === 'none') {
+    const gap = charPos.y - gy;
+    if (gap > 0.5) {
+      if (fallStartY === null) fallStartY = charPos.y;
+      else fallStartY = Math.max(fallStartY, charPos.y);
+    } else if (fallStartY !== null) {
+      const drop = fallStartY - gy;
+      fallStartY = null;
+      if (drop > FALL_DAMAGE_MIN) applyFallDamage(drop);
+    }
+  } else {
+    fallStartY = null;
   }
   charGroup.position.copy(charPos);
   charGroup.rotation.y = charYaw;
@@ -1339,7 +4263,12 @@ function updateWalk(dt) {
   if (bryce) {
     bryce.group.position.copy(charPos);
     bryce.group.rotation.y = charYaw;
-    playLoco(flying ? 'Idle' : (!moving ? 'Idle' : (running ? 'Running' : 'Walking')));
+    // seated: hold the Sitting Idle loop (the normal branch would
+    // override it with Idle every frame)
+    // asleep: same for the Sleeping loop
+    if (sitState === 'seated') playLoco('Sitting Idle');
+    else if (sleepState === 'asleep') playLoco('Sleeping');
+    else playLoco(flying ? 'Idle' : (!moving ? 'Idle' : (running ? 'Running' : 'Walking')));
   }
   // legs swing when running on the ground; dangle + lean forward when flying
   const swing = (moving && !flying) ? Math.sin(swingPhase) * 0.7 : 0;
@@ -1393,6 +4322,15 @@ function animate() {
   else controls.update();
   updateFerry(dt, clock.elapsedTime);
   if (bryce && bryce.mixer) bryce.mixer.update(dt);
+  updateNpcs(dt);
+  updatePet(dt);
+  updateSitPrompt();
+  updateCarPrompt();
+  updateBikePrompt();
+  updateEatPrompt();
+  updateSleepPrompt();
+  updateContextButton();
+  updateBuffUI();
   updateShadowFocus();
   updateNavHud(dt);
   renderer.render(scene, camera);
