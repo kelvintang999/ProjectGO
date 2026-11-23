@@ -1348,8 +1348,10 @@ const COMPASS = ['北', '東北', '東', '東南', '南', '西南', '西', '西�
 function updateNavHud(dt) {
   if (!navMode || mode !== 'walk' || !model) { navHud.style.display = 'none'; return; }
   navHud.style.display = 'block';
-  // speed: distance moved per second -> km/h, smoothed
-  const dist = charPos.distanceTo(_prevPos);
+  // speed: horizontal distance moved per second -> km/h, smoothed
+  // (horizontal only: the old 3D distance counted every ground-height
+  // snap as speed)
+  const dist = Math.hypot(charPos.x - _prevPos.x, charPos.z - _prevPos.z);
   _prevPos.copy(charPos);
   const kmh = dt > 0 ? (dist / dt) * 3.6 : 0;
   smoothKmh += (kmh - smoothKmh) * Math.min(1, dt * 6);
@@ -1363,7 +1365,7 @@ function updateNavHud(dt) {
   const rawZ = charPos.z + modelCenter.z;
   let area = '尖沙咀';
   if (inRoom) area = '個人房間';
-  if (Math.abs(rawX - (-266)) < 40 && Math.abs(rawZ) < 200) area = '廣東道';
+  else if (Math.abs(rawX - (-266)) < 40 && Math.abs(rawZ) < 200) area = '廣東道';
   else if (rawZ > 300) area = '尖沙咀海濱';
   navNavEl.textContent = area + ' · ' + compass;
 }
@@ -1465,6 +1467,16 @@ function updateWalkCamera() {
   ).multiplyScalar(camDist);
   const desired = target.clone().add(off);
   clampCameraToBuildings(target, desired);
+  // inside the room the distance/pitch clamps alone don't keep the
+  // camera in: the target sits 2.2m up, so max pitch + max distance
+  // already pokes through the 3m ceiling, and near a wall the camera
+  // swings outside it. Clamp the position to the room box instead
+  // (walls ±5.0/±4.0, ceiling underside at +3.0).
+  if (inRoom && roomCenter) {
+    desired.x = THREE.MathUtils.clamp(desired.x, roomCenter.x - 4.8, roomCenter.x + 4.8);
+    desired.y = THREE.MathUtils.clamp(desired.y, ROOM_Y + 0.5, ROOM_Y + 2.85);
+    desired.z = THREE.MathUtils.clamp(desired.z, roomCenter.z - 3.8, roomCenter.z + 3.8);
+  }
   camera.position.copy(desired);
   camera.lookAt(target);
 }
@@ -1667,9 +1679,24 @@ window.addEventListener('drop', (e) => {
 });
 
 // reset view: settings screen button (the HUD shortcut was removed
-// 2026-11-23 to declutter the HUD)
+// 2026-11-23 to declutter the HUD). Inside the room it resets to the
+// room centre — it must NOT teleport the player back to the plaza
+// (spawnCharacter clears inRoom, so the room case stays separate).
 function resetView() {
   if (!model) return;
+  if (inRoom && roomCenter) {
+    charPos.set(roomCenter.x, ROOM_Y, roomCenter.z);
+    charYaw = Math.PI; // face north (window), same as entering
+    charGroup.position.copy(charPos);
+    charGroup.rotation.y = charYaw;
+    if (bryce) { bryce.group.position.copy(charPos); bryce.group.rotation.y = charYaw; }
+    _prevPos.copy(charPos);
+    camYaw = 0;
+    camPitch = 0.2;
+    camDist = 3;
+    updateWalkCamera();
+    return;
+  }
   if (mode === 'walk') spawnCharacter();
   else frameModel();
 }
@@ -1839,6 +1866,15 @@ window.addEventListener('keydown', (e) => {
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+// a clicked button keeps keyboard focus, which can swallow later
+// keypresses (2026-11-23 browser test: A/D stopped working after
+// clicking a HUD button until the canvas was clicked again). Drop
+// focus right after any button click — the game reads keys from
+// the window, not from focused controls.
+document.addEventListener('click', (e) => {
+  const b = e.target && e.target.closest ? e.target.closest('button') : null;
+  if (b) b.blur();
+});
 
 // ---------- in-game menu (Esc / 選單 button) ----------
 // v1 does not pause the render loop (the ferry keeps sailing): the
@@ -2814,7 +2850,11 @@ function updateSitPrompt() {
 // phasing through to the passenger side (measured 2026-11-23).
 let car = null; // { group, pos, yaw, speed }
 let carState = 'none';
-const CAR_RANGE = 3;
+const CAR_RANGE = 3.5; // measured from the car CENTRE (like the bike):
+// a door-point range left the far corners + passenger side outside the
+// trigger, so walking up casually never showed the prompt (2026-11-23
+// browser test could not enter the car at all). Car half-diagonal is
+// ~2.5m, so 3.5m covers the whole car + a step around it.
 const CAR_ACCEL = 5.6, CAR_BRAKE = 20, CAR_DRAG = 1.2;
 const CAR_MAX_SPEED = 19.5, CAR_MAX_FAST = 32.5, CAR_MAX_REVERSE = 5; // top speed +30%, accel -30% (2026-11-23 user)
 const CAR_DOOR_LOCAL = new THREE.Vector3(1.15, 0, 0.4);
@@ -2888,8 +2928,9 @@ function toggleCar() {
   if (mode !== 'walk' || flying) return;
   if (sitState !== 'stand') return; // can't get in while sitting down
   if (carState === 'none') {
-    const door = carLocalToWorld(CAR_DOOR_LOCAL);
-    const d = Math.hypot(charPos.x - door.x, charPos.z - door.z);
+    // range from the car centre (see CAR_RANGE): the door is only
+    // used for the enter snap point, not the trigger
+    const d = Math.hypot(charPos.x - car.pos.x, charPos.z - car.pos.z);
     if (d > CAR_RANGE) return;
     if (bryce.oneShot) return; // wait for a move (e.g. punch) to finish
     if (!bryce.clips['Entering Car'] || !bryce.clips['Driving']) return;
@@ -2953,8 +2994,7 @@ function updateCarPrompt() {
   if (car && bryce && mode === 'walk') {
     if (carState === 'driving' || carState === 'entering') text = '按 F 下車';
     else if (carState === 'none' && !flying) {
-      const door = carLocalToWorld(CAR_DOOR_LOCAL);
-      const d = Math.hypot(charPos.x - door.x, charPos.z - door.z);
+      const d = Math.hypot(charPos.x - car.pos.x, charPos.z - car.pos.z);
       if (d <= CAR_RANGE) text = '按 F 上車';
     }
   }
@@ -3759,10 +3799,7 @@ function toggleVehicle() {
   if (bikeState === 'riding' || bikeState === 'mounting' || bikeState === 'dismounting') { tryBike(); return; }
   // neither vehicle occupied: nearest in-range vehicle wins
   let carD = Infinity, bikeD = Infinity;
-  if (car && bryce) {
-    const door = carLocalToWorld(CAR_DOOR_LOCAL);
-    carD = Math.hypot(charPos.x - door.x, charPos.z - door.z);
-  }
+  if (car && bryce) carD = Math.hypot(charPos.x - car.pos.x, charPos.z - car.pos.z);
   if (bike && bryce) bikeD = Math.hypot(charPos.x - bike.pos.x, charPos.z - bike.pos.z);
   if (carD <= CAR_RANGE && carD <= bikeD) toggleCar();
   else if (bikeD <= BIKE_RANGE) tryBike();
@@ -3866,10 +3903,14 @@ function createRoom() {
   box(0.2, 3, 8, wallMat, -5.1, 1.5, 0); // west
   box(0.2, 3, 8, wallMat, 5.1, 1.5, 0); // east
   box(10.4, 0.2, 8.4, wallMat, 0, 3.1, 0); // ceiling
-  // door frame (visual only — the exit is the settings button, not a walk-through)
+  // door frame + closed door panel (visual only — the exit is the
+  // settings button, not a walk-through; without the panel the gap
+  // was an open hole onto the city 300m below)
   box(0.12, 2.2, 0.12, wood, -0.66, 1.1, 4.05);
   box(0.12, 2.2, 0.12, wood, 0.66, 1.1, 4.05);
   box(1.44, 0.12, 0.12, wood, 0, 2.26, 4.05);
+  box(1.2, 2.2, 0.06, wood, 0, 1.1, 4.05); // door panel
+  box(0.09, 0.09, 0.09, darkMetal, 0.45, 1.05, 4.0); // knob
   // window: bright unlit plane on the north wall (opaque — no view of
   // the map 300m below) + frame + mullions
   const win = new THREE.Mesh(
@@ -3927,7 +3968,7 @@ function enterRoom() {
   if (bryce) { bryce.group.position.copy(charPos); bryce.group.rotation.y = charYaw; }
   _prevPos.copy(charPos); // so the speedometer doesn't spike on teleport
   // small room: pull the camera in and keep it low (the wheel/pitch
-  // clamps in patch.md steps R10–R11 keep it inside the room)
+  // clamps plus the position clamp in updateWalkCamera keep it inside)
   camYaw = 0; // camera south of the character, looking north into the room
   camPitch = 0.2;
   camDist = 3;
