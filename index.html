@@ -91,6 +91,10 @@
   .set-row { display: flex; justify-content: space-between; align-items: center; }
   .set-row .set-val { color: #e8eef7; font-weight: 700; }
   .set-soon { color: #94a3b8; font-size: 12px; text-align: left; margin: -8px 0 16px; }
+  .set-swatch-row { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+  .set-swatch-label { color: #e8eef7; font-size: 14px; width: 36px; text-align: left; flex: none; }
+  .swatch { width: 32px; height: 32px; border-radius: 50%; padding: 0; border: 2px solid rgba(255,255,255,0.35); cursor: pointer; flex: none; }
+  .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px #2563eb; }
   #toast {
     position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%) translateY(8px); z-index: 11;
     color: #fff; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
@@ -274,6 +278,7 @@
       <li>🏍️ <span class="label">騎車</span>——走到機車旁按 F（手機點「騎車」）</li>
       <li>🪑 <span class="label">坐下休息</span>——走到長椅按 E（手機點「坐下」）</li>
       <li>🥊 <span class="label">打拳</span>——J 出拳、K 出腿、L 連招</li>
+      <li>🏠 <span class="label">個人房間</span>——設定裡點「進入個人房間」</li>
     </ul>
     <div class="menu-controls">
       <h2>操作說明</h2>
@@ -306,6 +311,22 @@
       <li>✓ <span class="label">Bryce</span>——當前角色</li>
     </ul>
     <p class="set-soon">更多角色即將推出</p>
+    <p class="menu-section">打扮</p>
+    <div class="set-swatch-row"><span class="set-swatch-label">上衣</span>
+      <button class="swatch" data-part="shirt" data-color="0xffffff" style="background:#ffffff" title="白"></button>
+      <button class="swatch" data-part="shirt" data-color="0x3a3a3a" style="background:#3a3a3a" title="黑"></button>
+      <button class="swatch" data-part="shirt" data-color="0xc0392b" style="background:#c0392b" title="紅"></button>
+      <button class="swatch" data-part="shirt" data-color="0x2e6fd8" style="background:#2e6fd8" title="藍"></button>
+    </div>
+    <div class="set-swatch-row"><span class="set-swatch-label">下身</span>
+      <button class="swatch" data-part="shorts" data-color="0x8a8a8a" style="background:#8a8a8a" title="灰"></button>
+      <button class="swatch" data-part="shorts" data-color="0x3a3a3a" style="background:#3a3a3a" title="黑"></button>
+      <button class="swatch" data-part="shorts" data-color="0x2e6fd8" style="background:#2e6fd8" title="藍"></button>
+      <button class="swatch" data-part="shorts" data-color="0xc9b18a" style="background:#c9b18a" title="卡其"></button>
+    </div>
+    <p class="set-soon">換裝只在本次遊戲生效（重新載入後恢復原樣）</p>
+    <p class="menu-section">個人房間</p>
+    <button id="set-room" class="qc-btn">進入個人房間</button>
     <p class="menu-section">畫面</p>
     <button id="set-shadow" class="qc-btn set-row">光影<span class="set-val">開</span></button>
     <button id="set-night" class="qc-btn set-row">夜間<span class="set-val">關</span></button>
@@ -1190,6 +1211,7 @@ function updateNavHud(dt) {
   const rawX = charPos.x + modelCenter.x;
   const rawZ = charPos.z + modelCenter.z;
   let area = '尖沙咀';
+  if (inRoom) area = '個人房間';
   if (Math.abs(rawX - (-266)) < 40 && Math.abs(rawZ) < 200) area = '廣東道';
   else if (rawZ > 300) area = '尖沙咀海濱';
   navNavEl.textContent = area + ' · ' + compass;
@@ -1238,6 +1260,9 @@ document.getElementById('carBtn').addEventListener('click', () => toggleCar());
 document.getElementById('bikeBtn').addEventListener('click', () => tryBike());
 
 function spawnCharacter() {
+  // resetting the view from inside the room: leave the room state
+  // (exitRoom already clears this; this covers the reset path)
+  if (inRoom) { inRoom = false; if (roomGroup) roomGroup.visible = false; }
   // teleporting while seated would leave the character sitting in mid-air
   if (sitState !== 'stand') cancelSit();
   // same while driving: drop out of the car first
@@ -1275,13 +1300,13 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 window.addEventListener('pointermove', (e) => {
   if (!dragging || mode !== 'walk') return;
   camYaw -= (e.clientX - lastX) * 0.005;
-  camPitch = THREE.MathUtils.clamp(camPitch + (e.clientY - lastY) * 0.004, 0.08, 1.2);
+  camPitch = THREE.MathUtils.clamp(camPitch + (e.clientY - lastY) * 0.004, 0.08, inRoom ? 0.25 : 1.2);
   lastX = e.clientX; lastY = e.clientY;
 });
 window.addEventListener('pointerup', () => { dragging = false; });
 renderer.domElement.addEventListener('wheel', (e) => {
   if (mode !== 'walk') return;
-  camDist = THREE.MathUtils.clamp(camDist + e.deltaY * 0.01, 2, 40);
+  camDist = THREE.MathUtils.clamp(camDist + e.deltaY * 0.01, 2, inRoom ? 3.5 : 40);
 }, { passive: true });
 
 function updateWalkCamera() {
@@ -1300,6 +1325,8 @@ function updateWalkCamera() {
 // to walk mode (see setMode); once per page load, no localStorage
 let walkHintShown = false;
 function setMode(m) {
+  // no flying inside the personal room
+  if (m === 'fly' && inRoom) { showToast('房間裡不能飛行', 2000); return; }
   // switching modes while seated: stand back up first (the bench is a
   // walk-mode thing; flying off while seated would freeze the pose)
   if (sitState !== 'stand') cancelSit();
@@ -1373,6 +1400,7 @@ function onLoaded(gltf, name) {
   createCar();
   createBike();
   createStall();
+  createRoom();
   createBed();
   createPierDeck();
   // road + collision data is baked for this map: reset on every load
@@ -1696,6 +1724,8 @@ function syncSettingsUI() {
   document.querySelector('#set-shadow .set-val').textContent = shadowsOn ? '開' : '關';
   document.querySelector('#set-night .set-val').textContent = nightMode ? '開' : '關';
   document.querySelector('#set-nav .set-val').textContent = navMode ? '開' : '關';
+  syncRoomButton();
+  syncDressUpUI();
 }
 function openSettings(from) {
   settingsReturn = from;
@@ -1719,6 +1749,64 @@ document.getElementById('set-night').addEventListener('click', () => { setNightM
 document.getElementById('set-nav').addEventListener('click', () => { setNavMode(!navMode); syncSettingsUI(); });
 document.getElementById('set-reset').addEventListener('click', resetView);
 document.getElementById('set-pick').addEventListener('click', () => fileInput.click());
+
+// ---------- dress-up (settings) — PATCH FRAGMENT, not a module ----------
+// Paste into harbour-city-demo.html's module script, AFTER the
+// settings-screen listeners (see patch.md step D1). References the main
+// file's globals (bryce, showToast) and the .swatch buttons added to
+// #settings-menu (patch.md step D2).
+//
+// .glb facts (verified from bryce_animated.glb JSON, see
+// glb-inspection.md): 2 materials total — Ch42_Hair (hair + eyelashes)
+// and Ch42_Body (body + shirt + shorts + sneakers). Shirt and Shorts
+// SHARE Ch42_Body with the body, so each mesh's material must be cloned
+// once before tinting, or the whole body changes color.
+// Mesh node names: Ch42_Shirt, Ch42_Shorts (getObjectByName on
+// bryce.group). Tints multiply the existing textures (MeshStandardMaterial
+// color × map), so white (0xffffff) = the original look.
+// In-memory only: no persistence — a page reload restores the original
+// look (noted in the settings screen itself).
+
+// multiply tints; white = untinted (original texture colors)
+let shirtTint = 0xffffff;
+let shortsTint = 0xffffff;
+
+function tintBryceMesh(nodeName, hex) {
+  if (!bryce) return false;
+  const mesh = bryce.group.getObjectByName(nodeName);
+  if (!mesh || !mesh.isMesh || Array.isArray(mesh.material)) return false;
+  // clone once per mesh (see header: the material is shared with Body)
+  if (!mesh.material.userData.dressupCloned) {
+    mesh.material = mesh.material.clone();
+    mesh.material.userData.dressupCloned = true;
+  }
+  mesh.material.color.set(hex);
+  return true;
+}
+
+function applyDressUp() {
+  if (!bryce) return;
+  tintBryceMesh('Ch42_Shirt', shirtTint);
+  tintBryceMesh('Ch42_Shorts', shortsTint);
+}
+
+function syncDressUpUI() {
+  document.querySelectorAll('.swatch').forEach((b) => {
+    const want = b.dataset.part === 'shirt' ? shirtTint : shortsTint;
+    b.classList.toggle('active', Number(b.dataset.color) === want);
+  });
+}
+
+document.querySelectorAll('.swatch').forEach((b) => {
+  b.addEventListener('click', () => {
+    if (!bryce) { showToast('角色尚未載入', 2000); return; }
+    const hex = Number(b.dataset.color);
+    if (b.dataset.part === 'shirt') shirtTint = hex;
+    else shortsTint = hex;
+    applyDressUp();
+    syncDressUpUI();
+  });
+});
 
 // ---------- touch controls (mobile) ----------
 // Virtual joystick (bottom-left) moves the character; drag anywhere else
@@ -1846,6 +1934,7 @@ function loadBryce() {
     charGroup.visible = false; // procedural character stands down
     playLoco('Idle');
     spawnNpcs();
+    applyDressUp(); // re-apply any tint picked before Bryce finished loading
     console.log('Bryce loaded, clips:', Object.keys(clips).join(', '));
   }, undefined, () => {
     console.warn('bryce_animated.glb not found, using procedural character');
@@ -1868,6 +1957,16 @@ function playLoco(name) {
   bryceFadeTo(next, 0.25);
   bryce.loco = next;
 }
+// One-shot transition clips must finish in 1-2s (user rule 2026-11-23):
+// the raw Mixamo clips run 2-6s (Entering Car 5.50s, Exiting Car 5.83s),
+// so play them faster instead of waiting. timeScale is computed from
+// each clip's own duration, so future clips (Eating, Lie_Down) get the
+// same treatment automatically. The 'finished' event fires at the
+// sped-up end, so the state machine follows with no other change.
+// NOTE: timeScale must be set AFTER bryceFadeTo — its reset() restores
+// timeScale to 1.
+const ONE_SHOT_TARGET = { 'Entering Car': 1.0, 'Exiting Car': 1.0, 'Sitting Down': 1.0, 'Stand Up': 1.0 };
+const ONE_SHOT_DEFAULT = 1.5;
 function playOneShot(name, onDone) {
   if (!bryce || !bryce.clips[name] || bryce.oneShot) return false;
   const a = bryce.mixer.clipAction(bryce.clips[name]);
@@ -1875,6 +1974,8 @@ function playOneShot(name, onDone) {
   a.setLoop(THREE.LoopOnce);
   a.clampWhenFinished = true;
   bryceFadeTo(a, 0.15);
+  const target = ONE_SHOT_TARGET[name] ?? ONE_SHOT_DEFAULT;
+  a.timeScale = Math.max(1, bryce.clips[name].duration / target);
   bryce.oneShot = a;
   const done = (e) => {
     if (e.action !== a) return;
@@ -3204,6 +3305,176 @@ function createPierDeck() {
   pierDeck = { mesh: deck, entry };
 }
 
+// ---------- personal room v1 (PATCH FRAGMENT — not a module) ----------
+// Paste into harbour-city-demo.html's module script, BEFORE
+// `function updateWalk(dt) {` (see patch.md step R1). It references the
+// main file's globals (THREE, scene, charPos, charYaw, camYaw, camPitch,
+// camDist, mode, flying, sitState, carState, model, SPAWN_RAW,
+// modelCenter, groundHeight, showToast, spawnCharacter, updateWalkCamera,
+// closeSettings, setPauseMenu, fallStartY) and adds the names listed in
+// patch.md. Entry/exit is ONLY via the settings button (#set-room, see
+// patch.md step R2) — there is no portal on the map and no E-key trigger
+// (user decision 2026-11-23).
+//
+// The room floats at ROOM_Y above the spawn (same x/z): a pure Y
+// teleport, no new XZ math, no clash with the outer city, the ferry
+// (y≈1.35) or the 160m fog walls. It starts invisible — the player
+// outside never sees a floating box; enterRoom() shows it, exitRoom()
+// hides it again. The room is NOT Bryce-only: the procedural fallback
+// character can enter too (teleport + walk works for both).
+
+const ROOM_Y = 300; // world Y of the room floor (above the 160m fog walls)
+const ROOM_HALF_X = 4.4; // walkable half-width (walls at ±5.0, 0.6m margin)
+const ROOM_HALF_Z = 3.4; // walkable half-depth (walls at ±4.0, 0.6m margin)
+
+let inRoom = false;
+let roomGroup = null;
+let roomCenter = null; // THREE.Vector3, world coords of the room centre at floor level
+
+function createRoom() {
+  if (roomGroup) { scene.remove(roomGroup); roomGroup = null; roomCenter = null; }
+  if (!model) return;
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const g = new THREE.Group();
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.95 });
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x9c7a4d, roughness: 0.8 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xf5f5f0, roughness: 0.9 });
+  const teal = new THREE.MeshStandardMaterial({ color: 0x2dd4bf, roughness: 0.9 });
+  const paleBlue = new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.9 });
+  const rugMat = new THREE.MeshStandardMaterial({ color: 0xc08497, roughness: 1.0 });
+  const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2f3336, roughness: 0.5, metalness: 0.6 });
+  const box = (w, h, d, m, x, y, z) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+    b.position.set(x, y, z);
+    g.add(b);
+    return b;
+  };
+  // shell: floor 10x8, walls 3m, ceiling; door gap 1.2w x 2.2h in the south wall
+  box(10, 0.2, 8, floorMat, 0, -0.1, 0);
+  box(10.4, 3, 0.2, wallMat, 0, 1.5, -4.1); // north
+  box(4.6, 3, 0.2, wallMat, -2.8, 1.5, 4.1); // south, left of door
+  box(4.6, 3, 0.2, wallMat, 2.8, 1.5, 4.1); // south, right of door
+  box(1.2, 0.8, 0.2, wallMat, 0, 2.6, 4.1); // lintel above the door
+  box(0.2, 3, 8, wallMat, -5.1, 1.5, 0); // west
+  box(0.2, 3, 8, wallMat, 5.1, 1.5, 0); // east
+  box(10.4, 0.2, 8.4, wallMat, 0, 3.1, 0); // ceiling
+  // door frame (visual only — the exit is the settings button, not a walk-through)
+  box(0.12, 2.2, 0.12, wood, -0.66, 1.1, 4.05);
+  box(0.12, 2.2, 0.12, wood, 0.66, 1.1, 4.05);
+  box(1.44, 0.12, 0.12, wood, 0, 2.26, 4.05);
+  // window: bright unlit plane on the north wall (opaque — no view of
+  // the map 300m below) + frame + mullions
+  const win = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 1.4),
+    new THREE.MeshBasicMaterial({ color: 0xbfe3ff })
+  );
+  win.position.set(0, 1.8, -3.98);
+  g.add(win);
+  box(2.6, 0.08, 0.06, wood, 0, 2.54, -3.97);
+  box(2.6, 0.08, 0.06, wood, 0, 1.06, -3.97);
+  box(0.08, 1.56, 0.06, wood, -1.24, 1.8, -3.97);
+  box(0.08, 1.56, 0.06, wood, 1.24, 1.8, -3.97);
+  box(0.05, 1.4, 0.04, wood, 0, 1.8, -3.96);
+  box(2.4, 0.05, 0.04, wood, 0, 1.8, -3.96);
+  // bed (visual only — the Sleeping clip + sleep trigger are separate future work)
+  box(1.2, 0.3, 2.2, wood, -3.6, 0.15, -2.6);
+  box(1.1, 0.18, 2.1, white, -3.6, 0.39, -2.6);
+  box(0.9, 0.12, 0.5, paleBlue, -3.6, 0.52, -3.4);
+  box(1.12, 0.06, 1.2, teal, -3.6, 0.5, -2.2);
+  // table + chair (north-east corner)
+  box(1.6, 0.06, 0.8, wood, 3.6, 0.75, -2.8);
+  for (const dx of [-0.75, 0.75]) for (const dz of [-0.35, 0.35]) {
+    box(0.05, 0.75, 0.05, darkMetal, 3.6 + dx, 0.375, -2.8 + dz);
+  }
+  box(0.45, 0.05, 0.45, wood, 3.6, 0.45, -1.9);
+  box(0.45, 0.5, 0.05, wood, 3.6, 0.75, -2.14);
+  box(0.05, 0.45, 0.05, darkMetal, 3.6, 0.225, -1.9);
+  // rug
+  box(2.4, 0.02, 1.6, rugMat, 0, 0.01, -0.5);
+  // the ceiling blocks the sun, so the room needs its own light
+  // (intensity is a first guess — tune after the first visual check)
+  const lamp = new THREE.PointLight(0xffe6b8, 40, 15, 1.8);
+  lamp.position.set(0, 2.7, 0);
+  g.add(lamp);
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.position.set(sx, ROOM_Y, sz);
+  g.visible = false; // shown only while the player is inside
+  scene.add(g);
+  roomGroup = g;
+  roomCenter = new THREE.Vector3(sx, ROOM_Y, sz);
+}
+
+function enterRoom() {
+  if (inRoom || !model || !roomGroup) return false;
+  if (mode !== 'walk' || flying) return false;
+  if (sitState !== 'stand' || carState !== 'none' || bikeState !== 'none' || sleepState !== 'awake') return false;
+  fallStartY = null; // a teleport is not a fall
+  inRoom = true;
+  roomGroup.visible = true;
+  // spawn at the room centre, facing north (into the room, toward the bed/window)
+  charPos.set(roomCenter.x, ROOM_Y, roomCenter.z);
+  charYaw = Math.PI;
+  charGroup.position.copy(charPos);
+  charGroup.rotation.y = charYaw;
+  if (bryce) { bryce.group.position.copy(charPos); bryce.group.rotation.y = charYaw; }
+  _prevPos.copy(charPos); // so the speedometer doesn't spike on teleport
+  // small room: pull the camera in and keep it low (the wheel/pitch
+  // clamps in patch.md steps R10–R11 keep it inside the room)
+  camYaw = 0; // camera south of the character, looking north into the room
+  camPitch = 0.2;
+  camDist = 3;
+  updateWalkCamera();
+  syncRoomButton();
+  showToast('回到房間', 2000);
+  return true;
+}
+
+function exitRoom() {
+  if (!inRoom) return false;
+  inRoom = false;
+  if (roomGroup) roomGroup.visible = false;
+  syncRoomButton();
+  showToast('離開房間', 1500);
+  spawnCharacter(); // back to the pier plaza (also resets the camera)
+  return true;
+}
+
+function toggleRoom() {
+  // settings-button trigger: returns true if it acted.
+  if (!model || !roomGroup) {
+    showToast('先開始遊戲，載入地圖後才能進入房間', 2500);
+    return false;
+  }
+  if (inRoom) return exitRoom();
+  if (!enterRoom()) {
+    showToast('現在不能進入房間', 2000);
+    return false;
+  }
+  return true;
+}
+
+function clampToRoom() {
+  if (!roomCenter) return;
+  charPos.x = THREE.MathUtils.clamp(charPos.x, roomCenter.x - ROOM_HALF_X, roomCenter.x + ROOM_HALF_X);
+  charPos.z = THREE.MathUtils.clamp(charPos.z, roomCenter.z - ROOM_HALF_Z, roomCenter.z + ROOM_HALF_Z);
+}
+
+function syncRoomButton() {
+  const btn = document.getElementById('set-room');
+  if (btn) btn.textContent = inRoom ? '離開房間' : '進入個人房間';
+}
+
+// settings button: enter/exit, then drop straight into the game —
+// closeSettings reopens the pause menu by its return logic, so close
+// that too instead of leaving the player behind two overlays.
+document.getElementById('set-room').addEventListener('click', () => {
+  if (!toggleRoom()) return; // guards failed (toast already shown); stay in settings
+  closeSettings();
+  setPauseMenu(false);
+});
+
 function updateWalk(dt) {
   // driving: the car has its own update (movement, ground, camera)
   if (carState === 'driving') { updateDrive(dt); return; }
@@ -3235,7 +3506,7 @@ function updateWalk(dt) {
   // vertical: hold Space to fly up, Ctrl to descend; otherwise hover.
   // No flying while seated or in the car.
   let vy = 0;
-  if (wantFly && sitState === 'stand' && carState === 'none' && bikeState === 'none' && sleepState === 'awake') { flying = true; vy = 12; }
+  if (wantFly && !inRoom && sitState === 'stand' && carState === 'none' && bikeState === 'none' && sleepState === 'awake') { flying = true; vy = 12; }
   if (wantDown) { vy = -12; }
   if (moving) {
     // analog stick: slight push = slow walk (keyboard input is always
@@ -3258,21 +3529,31 @@ function updateWalk(dt) {
     swingPhase *= 0.9;
   }
   // stay inside the map; hitting the edge shows the fog-of-war message
-  clampToBounds();
-  // don't walk through the bench (push-out, see collideBench)
-  collideBench();
-  // don't walk through the food stall (push-out, see collideStall)
-  collideStall();
-  // don't walk through the bed (push-out, see collideBed)
-  collideBed();
+  // (in the personal room: clamp to the room instead, and skip the
+  // map-only collisions — the bench/stall/bed/footprint are all outside)
+  if (inRoom) clampToRoom();
+  else {
+    clampToBounds();
+    // don't walk through the bench (push-out, see collideBench)
+    collideBench();
+    // don't walk through the food stall (push-out, see collideStall)
+    collideStall();
+    // don't walk through the bed (push-out, see collideBed)
+    collideBed();
+  }
   // don't walk through buildings (footprint grid; skipped while flying
   // — fly mode is for aerial inspection — and while sitting, asleep, or getting
   // in/out of the car, so the push-out never fights an animation)
-  if (!flying && sitState === 'stand' && carState === 'none' && bikeState === 'none' && sleepState === 'awake') collideFootprint(charPos, 0.4);
+  if (!inRoom && !flying && sitState === 'stand' && carState === 'none' && bikeState === 'none' && sleepState === 'awake') collideFootprint(charPos, 0.4);
   // vertical + ground (gy is reused by the fall check below, so it is
   // hoisted — the groundHeight calls keep their original order and refY)
   let gy;
-  if (flying) {
+  if (inRoom) {
+    // personal room: flat floor at ROOM_Y, no map ground, no flying
+    gy = ROOM_Y;
+    charPos.y = ROOM_Y;
+    flying = false;
+  } else if (flying) {
     charPos.y += vy * dt;
     gy = groundHeight(charPos.x, charPos.z, charPos.y);
     if (charPos.y <= gy) { charPos.y = gy; if (vy <= 0) flying = false; }
@@ -3288,7 +3569,7 @@ function updateWalk(dt) {
   // point while airborne; landing more than 8m below it hurts.
   // Mode-switch teleports and respawns reset the tracker (see
   // spawnCharacter), so they never count as falls.
-  if (!flying && sitState === 'stand' && carState === 'none') {
+  if (!inRoom && !flying && sitState === 'stand' && carState === 'none') {
     const gap = charPos.y - gy;
     if (gap > 0.5) {
       if (fallStartY === null) fallStartY = charPos.y;
