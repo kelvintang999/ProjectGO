@@ -2,14 +2,14 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta id="viewport-meta" name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>尖沙咀 Demo — 香港 3D</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1420; font-family: system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif; }
   #app { position: fixed; inset: 0; }
   canvas { display: block; touch-action: none; }
   #hud {
-    position: fixed; top: 12px; left: 12px; z-index: 10; color: #e8eef7;
+    position: fixed; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); z-index: 10; color: #e8eef7;
     background: rgba(10, 16, 28, 0.72); border: 1px solid rgba(255,255,255,0.14);
     border-radius: 12px; padding: 12px 14px; max-width: 340px; backdrop-filter: blur(6px);
   }
@@ -17,12 +17,21 @@
   #hud p { font-size: 12px; line-height: 1.6; margin: 4px 0; color: #b9c6da; white-space: pre-line; }
   #hud .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   #hud .row.hud-group { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.12); }
+  /* C: combat buttons live in one collapsible group (2x2 when open);
+     the stats line is its own collapsible row, hidden by default */
+  #combat-group { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.12); }
+  #combatToggle { min-height: 44px; }
+  #combatGrid { display: none; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  #combatGrid.open { display: grid; }
+  #combatGrid button { min-height: 44px; }
+  #statsToggle { font-size: 12px; padding: 6px 10px; min-height: 36px; }
   button {
     font: inherit; font-size: 13px; color: #fff; background: #2563eb; border: 0;
     border-radius: 8px; padding: 8px 12px; cursor: pointer;
   }
   button.secondary { background: #334155; }
   button:hover { filter: brightness(1.15); }
+  button:active { filter: brightness(1.3); transform: scale(0.97); }
   #bar-wrap { height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; margin-top: 8px; display: none; }
   #bar { height: 100%; width: 0%; background: #38bdf8; }
   #status { font-size: 12px; color: #7dd3fc; min-height: 16px; }
@@ -31,10 +40,23 @@
   #hud #health-text { color: #e8eef7; }
   #hud #buff-text { color: #fbbf24; min-height: 16px; }
   #help {
-    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+    position: fixed; bottom: max(12px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10;
     color: #dbe4f0; background: rgba(10, 16, 28, 0.72); border: 1px solid rgba(255,255,255,0.14);
     border-radius: 999px; padding: 8px 16px; font-size: 12px; white-space: nowrap; backdrop-filter: blur(6px);
   }
+  /* onboarding step bar: takes #help's slot while the route runs
+     (desktop bottom 12px, mobile bottom 210px — see the coarse block);
+     #help itself hides until the route ends */
+  #onboard-bar {
+    position: fixed; bottom: max(12px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10;
+    color: #dbe4f0; background: rgba(10, 16, 28, 0.85); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 8px 10px 8px 16px; font-size: 13px; backdrop-filter: blur(6px);
+    display: none; align-items: center; gap: 8px; max-width: 94vw;
+  }
+  #onboard-bar.show { display: flex; }
+  #onboard-text { white-space: nowrap; }
+  #onboard-bar button { font-size: 12px; padding: 6px 10px; min-height: 36px; flex: none; }
+  body.onboarding #help { display: none; }
   #drop-hint {
     position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center;
     background: rgba(37, 99, 235, 0.25); border: 3px dashed #60a5fa; border-radius: 16px;
@@ -74,20 +96,26 @@
     position: fixed; inset: 0; z-index: 32; display: none; align-items: center; justify-content: center;
     background: rgba(8, 12, 22, 0.94); backdrop-filter: blur(4px);
   }
-  #main-menu .panel, #pause-menu .panel, #settings-menu .panel { width: min(420px, 92vw); max-height: 86vh; overflow-y: auto; text-align: center; }
-  #main-menu h1, #pause-menu h1, #settings-menu h1 { color: #e8eef7; font-size: 30px; margin: 0 0 6px; font-weight: 700; }
-  #main-menu .sub, #pause-menu .sub, #settings-menu .sub { color: #b9c6da; font-size: 13px; margin: 0 0 16px; }
+  #dressup-menu {
+    position: fixed; inset: 0; z-index: 33; display: none; align-items: center; justify-content: center;
+    background: rgba(8, 12, 22, 0.94); backdrop-filter: blur(4px);
+  }
+  #main-menu .panel, #pause-menu .panel, #settings-menu .panel, #dressup-menu .panel { width: min(420px, 92vw); max-height: 86vh; overflow-y: auto; text-align: center; }
+  #main-menu h1, #pause-menu h1, #settings-menu h1, #dressup-menu h1 { color: #e8eef7; font-size: 30px; margin: 0 0 6px; font-weight: 700; }
+  #main-menu .sub, #pause-menu .sub, #settings-menu .sub, #dressup-menu .sub { color: #b9c6da; font-size: 13px; margin: 0 0 16px; }
   #main-menu .pitch { color: #e8eef7; font-size: 14px; line-height: 1.6; margin: 0 0 20px; }
   .menu-start { min-height: 52px; text-align: center; }
   .menu-section { color: #e8eef7; font-size: 13px; font-weight: 700; text-align: left; margin: 0 0 8px; }
   .menu-list { text-align: left; margin: 0 0 16px; padding: 0; list-style: none; }
   .menu-list li { color: #cbd5e1; font-size: 13px; line-height: 1.7; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
   .menu-list li:last-child { border-bottom: 0; }
+  .menu-list li.locked { opacity: 0.45; cursor: pointer; }
+  .menu-list li.locked .lock-tag { color: #94a3b8; font-size: 12px; }
   .menu-list .label { color: #e8eef7; font-weight: 700; }
   .menu-controls { text-align: left; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 12px 14px; margin: 0 0 8px; }
   .menu-controls h2 { color: #e8eef7; font-size: 13px; margin: 0 0 6px; font-weight: 700; }
   .menu-controls p { color: #b9c6da; font-size: 13px; line-height: 1.8; margin: 0; }
-  #main-menu .note, #pause-menu .note, #settings-menu .note { color: #94a3b8; font-size: 12px; margin: 16px 0 0; }
+  #main-menu .note, #pause-menu .note, #settings-menu .note, #dressup-menu .note { color: #94a3b8; font-size: 12px; margin: 16px 0 0; }
   /* settings rows: label left, on/off value right (min-height 48px comes from .qc-btn) */
   .set-row { display: flex; justify-content: space-between; align-items: center; }
   .set-row .set-val { color: #e8eef7; font-weight: 700; }
@@ -154,9 +182,14 @@
   #nav-unit { font-size: 13px; color: #cbd5e1; margin-top: 2px; }
   #nav-nav { font-size: 14px; color: #e2e8f0; margin-top: 8px; }
   .touch-help { display: none; }
+  /* B3: the is-mobile body class (JS) widens the touch/desktop switch
+     beyond the pointer media query (e.g. narrow desktop windows) */
+  body.is-mobile .kb-help { display: none; }
+  body.is-mobile .touch-help { display: inline; }
+  body.is-mobile #touch-ui { display: block; }
   #touch-ui { display: none; position: fixed; inset: 0; z-index: 10; pointer-events: none; }
   #joy {
-    position: absolute; left: 20px; bottom: 20px; width: 120px; height: 120px;
+    position: absolute; left: max(20px, env(safe-area-inset-left)); bottom: max(20px, env(safe-area-inset-bottom)); width: 120px; height: 120px;
     border-radius: 50%; background: rgba(10, 16, 28, 0.45);
     border: 1px solid rgba(255,255,255,0.25); pointer-events: auto; touch-action: none;
   }
@@ -166,7 +199,7 @@
     transform: translate(-50%, -50%);
   }
   #touch-btns {
-    position: absolute; right: 20px; bottom: 20px; display: flex; gap: 10px;
+    position: absolute; right: max(20px, env(safe-area-inset-right)); bottom: max(20px, env(safe-area-inset-bottom)); display: flex; gap: 10px;
     pointer-events: auto;
   }
   .touch-btn {
@@ -175,6 +208,26 @@
     touch-action: none; user-select: none; -webkit-user-select: none;
   }
   .touch-btn.on { background: #2563eb; }
+  #err { color: #fca5a5; }
+  /* UI collapse toggle: always visible, bottom-right (above the touch
+     buttons on mobile). Collapsing hides the HUD panel + help line only;
+     nav HUD, touch controls, prompts and toast stay visible. */
+  #uiToggle {
+    position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); z-index: 15;
+    width: 48px; height: 48px; border-radius: 50%; padding: 0; font-size: 20px;
+    background: rgba(51, 65, 85, 0.85); border: 1px solid rgba(255,255,255,0.25);
+  }
+  /* in-game menu button: pill, bottom-right above #uiToggle, outside
+     #hud so it stays visible when the UI is collapsed */
+  #menuBtn {
+    position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: calc(70px + env(safe-area-inset-bottom)); z-index: 15;
+    min-height: 48px; padding: 10px 18px; border-radius: 999px; font-size: 14px;
+    background: rgba(51, 65, 85, 0.85); border: 1px solid rgba(255,255,255,0.25);
+  }
+  body.ui-collapsed #hud, body.ui-collapsed #help { display: none; }
+  /* A5/E: this block MUST stay last in <style> — the base #uiToggle /
+     #menuBtn rules above used to override the coarse bottom offsets
+     (same specificity, later rule wins), stacking ✕ on top of 降 */
   @media (pointer: coarse) {
     #touch-ui { display: block; }
     .kb-help { display: none; }
@@ -188,33 +241,21 @@
     /* touch buttons 64px -> 56px: three 64px buttons + joystick nearly
        fill a 360px screen; 56px leaves breathing room */
     .touch-btn { width: 56px; height: 56px; font-size: 15px; }
-    #help { bottom: 210px; white-space: normal; max-width: 92vw; text-align: center; }
-    #toast { bottom: 160px; white-space: normal; max-width: 92vw; text-align: center; }
-    #sit-prompt { bottom: 260px; }
-    #car-prompt { bottom: 310px; }
-    #eat-prompt { bottom: 360px; }
-    #sleep-prompt { bottom: 410px; }
-    #bike-prompt { bottom: 460px; }
-    #uiToggle { bottom: 100px; right: 20px; } /* above the 56px touch buttons on mobile (top edge 76px) */
-    #menuBtn { bottom: 158px; right: 20px; } /* above #uiToggle (100 + 48 + 10) */
+    /* B2: every touch target at least 44px */
+    button { min-height: 44px; min-width: 44px; }
+    .swatch { width: 44px; height: 44px; }
+    #help { bottom: calc(210px + env(safe-area-inset-bottom)); white-space: normal; max-width: 92vw; text-align: center; }
+    #onboard-bar { bottom: calc(210px + env(safe-area-inset-bottom)); white-space: normal; max-width: 92vw; text-align: center; flex-wrap: wrap; justify-content: center; }
+    #onboard-text { white-space: normal; }
+    #toast { bottom: calc(160px + env(safe-area-inset-bottom)); white-space: normal; max-width: 92vw; text-align: center; }
+    #sit-prompt { bottom: calc(260px + env(safe-area-inset-bottom)); }
+    #car-prompt { bottom: calc(310px + env(safe-area-inset-bottom)); }
+    #eat-prompt { bottom: calc(360px + env(safe-area-inset-bottom)); }
+    #sleep-prompt { bottom: calc(410px + env(safe-area-inset-bottom)); }
+    #bike-prompt { bottom: calc(460px + env(safe-area-inset-bottom)); }
+    #uiToggle { bottom: calc(100px + env(safe-area-inset-bottom)); right: max(20px, env(safe-area-inset-right)); } /* above the 56px touch buttons on mobile (top edge 76px) */
+    #menuBtn { bottom: calc(158px + env(safe-area-inset-bottom)); right: max(20px, env(safe-area-inset-right)); } /* above #uiToggle (100 + 48 + 10) */
   }
-  #err { color: #fca5a5; }
-  /* UI collapse toggle: always visible, bottom-right (above the touch
-     buttons on mobile). Collapsing hides the HUD panel + help line only;
-     nav HUD, touch controls, prompts and toast stay visible. */
-  #uiToggle {
-    position: fixed; right: 12px; bottom: 12px; z-index: 15;
-    width: 48px; height: 48px; border-radius: 50%; padding: 0; font-size: 20px;
-    background: rgba(51, 65, 85, 0.85); border: 1px solid rgba(255,255,255,0.25);
-  }
-  /* in-game menu button: pill, bottom-right above #uiToggle, outside
-     #hud so it stays visible when the UI is collapsed */
-  #menuBtn {
-    position: fixed; right: 12px; bottom: 70px; z-index: 15;
-    min-height: 48px; padding: 10px 18px; border-radius: 999px; font-size: 14px;
-    background: rgba(51, 65, 85, 0.85); border: 1px solid rgba(255,255,255,0.25);
-  }
-  body.ui-collapsed #hud, body.ui-collapsed #help { display: none; }
 </style>
 </head>
 <body>
@@ -223,20 +264,25 @@
 <div id="hud">
   <h1>尖沙咀 Demo</h1>
   <p id="meta">尖沙咀 3D · 尚未載入模型</p>
-  <p id="stats"></p>
+  <div id="stats-wrap"><button id="statsToggle" class="secondary" title="顯示／隱藏統計">統計 ▸</button>
+  <p id="stats" style="display:none"></p></div>
   <div id="bar-wrap"><div id="bar"></div></div>
   <p id="status">正在載入模型…</p>
+  <div class="row" id="retry-row" style="display:none"><button id="retryLoad" class="secondary">重試載入</button></div>
   <div id="health-wrap"><div id="health-fill"></div></div>
   <p id="health-text">體力 100/100</p>
   <p id="buff-text"></p>
   <div class="row">
     <button id="modeToggle" class="secondary">模式：步行</button>
   </div>
-  <div class="row hud-group">
-    <button id="punchBtn" class="secondary">拳 (J)</button>
-    <button id="kickBtn" class="secondary">腿 (K)</button>
-    <button id="comboBtn" class="secondary">連招 (L)</button>
-    <button id="drinkBtn" class="secondary">喝水 (T)</button>
+  <div id="combat-group">
+    <button id="combatToggle" class="secondary">🥊 戰鬥 ▸</button>
+    <div id="combatGrid">
+      <button id="punchBtn" class="secondary">拳 (J)</button>
+      <button id="kickBtn" class="secondary">腿 (K)</button>
+      <button id="comboBtn" class="secondary">連招 (L)</button>
+      <button id="drinkBtn" class="secondary">喝水 (T)</button>
+    </div>
   </div>
   <div id="interact-row" class="row hud-group" style="display:none">
     <button id="interactBtn" class="secondary">互動</button>
@@ -244,7 +290,8 @@
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
 
-<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下／吃飯／睡覺 · F 上車／騎車 · T 喝水 · H 收起介面</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車／騎車：搖桿上推加速、左右轉向 · 右下角按鈕收起介面</span></div>
+<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 按住空白鍵上升 · Ctrl 降 · E 坐下／吃飯／睡覺 · F 上車／騎車 · T 喝水 · H 收起介面</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車／騎車：搖桿上推加速、左右轉向 · 右下角按鈕收起介面</span></div>
+<div id="onboard-bar"><span id="onboard-text"></span><button id="onboardSkipStep" class="secondary">跳過這步</button><button id="onboardSkipAll" class="secondary">跳過引導</button></div>
 <div id="toast"></div>
 <div id="sit-prompt"></div>
 <div id="car-prompt"></div>
@@ -274,20 +321,22 @@
     <h1>Project GO</h1>
     <p class="sub">尖沙咀 3D · 自由探索</p>
     <p class="pitch">在尖沙咀自由探索——步行、開車、騎車、坐下休息、打拳</p>
+    <p id="oom-note" class="note" style="display:none"></p>
     <button id="menu-start" class="qc-btn menu-start">開始遊戲</button>
     <p class="menu-section">可以做的事</p>
     <ul class="menu-list">
       <li>🚶 <span class="label">步行探索</span>——尖沙咀碼頭、海濱、廣東道</li>
       <li>🚗 <span class="label">開車</span>——走到車旁按 F（手機點「上車」）</li>
-      <li>🏍️ <span class="label">騎車</span>——走到機車旁按 F（手機點「騎車」）</li>
-      <li>🪑 <span class="label">坐下休息</span>——走到長椅按 E（手機點「坐下」）</li>
-      <li>🍜 <span class="label">吃飯</span>——大排檔按 E，體力 +25、跑快啲</li>
-      <li>🛏️ <span class="label">睡覺</span>——走到床邊按 E，體力回滿</li>
-      <li>🥊 <span class="label">打拳</span>——J 出拳、K 出腿、L 連招</li>
+      <li data-onboard-lock>🏍️ <span class="label">騎車</span>——走到機車旁按 F（手機點「騎車」）</li>
+      <li data-onboard-lock>🪑 <span class="label">坐下休息</span>——走到長椅按 E（手機點「坐下」）</li>
+      <li data-onboard-lock>🍜 <span class="label">吃飯</span>——大排檔按 E，體力 +25、跑快啲</li>
+      <li data-onboard-lock>🛏️ <span class="label">睡覺</span>——走到床邊按 E，體力回滿</li>
+      <li data-onboard-lock>🥊 <span class="label">打拳</span>——J 出拳、K 出腿、L 連招</li>
     </ul>
+    <p id="menu-lock-note" class="note" style="display:none"></p>
     <div class="menu-controls">
       <h2>操作說明</h2>
-      <p><span class="touch-help">左搖桿移動 · 拖曳轉鏡頭 · 右下按鈕：跑／升／降 · 開車／騎車：搖桿上推加速、左右轉向</span><span class="kb-help">WASD 移動 · Shift 跑 · 空白鍵飛 · 滑鼠轉鏡頭 · 滾輪縮放 · E 坐下 · F 上車／騎車 · T 喝水 · H 收起介面 · Esc 選單</span></p>
+      <p><span class="touch-help">左搖桿移動 · 拖曳轉鏡頭 · 右下按鈕：跑／升／降 · 開車／騎車：搖桿上推加速、左右轉向</span><span class="kb-help">WASD 移動 · Shift 跑 · 按住空白鍵上升 · 滑鼠轉鏡頭 · 滾輪縮放 · E 坐下 · F 上車／騎車 · T 喝水 · H 收起介面 · Esc 選單</span></p>
     </div>
     <p class="note">地圖資料：香港特區政府地政總署 · 3D-BIT00 · CSDI</p>
     <p class="note" id="version-menu"></p>
@@ -318,19 +367,7 @@
     </ul>
     <p class="set-soon">更多角色即將推出</p>
     <p class="menu-section">打扮</p>
-    <div class="set-swatch-row"><span class="set-swatch-label">上衣</span>
-      <button class="swatch" data-part="shirt" data-color="0xffffff" style="background:#ffffff" title="白"></button>
-      <button class="swatch" data-part="shirt" data-color="0x3a3a3a" style="background:#3a3a3a" title="黑"></button>
-      <button class="swatch" data-part="shirt" data-color="0xc0392b" style="background:#c0392b" title="紅"></button>
-      <button class="swatch" data-part="shirt" data-color="0x2e6fd8" style="background:#2e6fd8" title="藍"></button>
-    </div>
-    <div class="set-swatch-row"><span class="set-swatch-label">下身</span>
-      <button class="swatch" data-part="shorts" data-color="0x8a8a8a" style="background:#8a8a8a" title="灰"></button>
-      <button class="swatch" data-part="shorts" data-color="0x3a3a3a" style="background:#3a3a3a" title="黑"></button>
-      <button class="swatch" data-part="shorts" data-color="0x2e6fd8" style="background:#2e6fd8" title="藍"></button>
-      <button class="swatch" data-part="shorts" data-color="0xc9b18a" style="background:#c9b18a" title="卡其"></button>
-    </div>
-    <p class="set-soon">換裝只在本次遊戲生效（重新載入後恢復原樣）</p>
+    <p class="set-soon">打扮已搬進個人房間——走進房間，靠近衣櫃按 E 換裝。</p>
     <div id="set-room-section">
     <p class="menu-section">個人房間</p>
     <button id="set-room" class="qc-btn">進入個人房間</button>
@@ -344,6 +381,26 @@
     <button id="set-reset" class="qc-btn">重置視角</button>
     <button id="set-pick" class="qc-btn">選擇 .glb 檔案</button>
     <button id="settings-back" class="qc-btn secondary menu-start">返回</button>
+  </div>
+</div>
+<div id="dressup-menu">
+  <div class="panel">
+    <h1>換裝</h1>
+    <p class="sub">衣櫃 · 個人房間</p>
+    <div class="set-swatch-row"><span class="set-swatch-label">上衣</span>
+      <button class="swatch" data-part="shirt" data-color="0xffffff" style="background:#ffffff" title="白"></button>
+      <button class="swatch" data-part="shirt" data-color="0x3a3a3a" style="background:#3a3a3a" title="黑"></button>
+      <button class="swatch" data-part="shirt" data-color="0xc0392b" style="background:#c0392b" title="紅"></button>
+      <button class="swatch" data-part="shirt" data-color="0x2e6fd8" style="background:#2e6fd8" title="藍"></button>
+    </div>
+    <div class="set-swatch-row"><span class="set-swatch-label">下身</span>
+      <button class="swatch" data-part="shorts" data-color="0x8a8a8a" style="background:#8a8a8a" title="灰"></button>
+      <button class="swatch" data-part="shorts" data-color="0x3a3a3a" style="background:#3a3a3a" title="黑"></button>
+      <button class="swatch" data-part="shorts" data-color="0x2e6fd8" style="background:#2e6fd8" title="藍"></button>
+      <button class="swatch" data-part="shorts" data-color="0xc9b18a" style="background:#c9b18a" title="卡其"></button>
+    </div>
+    <p class="set-soon">換裝只在本次遊戲生效（重新載入後恢復原樣）</p>
+    <button id="dressup-close" class="qc-btn secondary menu-start">完成</button>
   </div>
 </div>
 <div id="quality-choice">
@@ -376,6 +433,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const app = document.getElementById('app');
@@ -389,7 +447,7 @@ const dropHint = document.getElementById('drop-hint');
 
 // Build label (test 11⑩: nothing on the page showed the version).
 // Shown on the main menu + the HUD stats line; bump on every push.
-const BUILD_VERSION = '2026-11-23-6';
+const BUILD_VERSION = '2026-11-23-7';
 document.getElementById('version-menu').textContent = '版本 ' + BUILD_VERSION;
 
 // ---------- renderer / scene ----------
@@ -399,6 +457,16 @@ document.getElementById('version-menu').textContent = '版本 ' + BUILD_VERSION;
 // browsers; the lite map (256²) needs ~360MB. Map quality itself is the
 // player's choice up front (see the entry block below).
 const isMobile = matchMedia('(pointer: coarse)').matches || window.innerWidth < 768;
+// B3: expose the same mobile definition to CSS (the pointer media
+// query alone misses narrow desktop windows)
+document.body.classList.add(isMobile ? 'is-mobile' : 'is-desktop');
+
+// ---------- localStorage (safe: private mode throws on access) ----------
+// Keys: projectgo_oom_pending (B: quality whose load never finished),
+// projectgo_onboarding_done (onboarding: '1' once finished/skipped).
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
+function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
 const renderer = new THREE.WebGLRenderer({ antialias: !isMobile });
 renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -410,6 +478,16 @@ app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87b5d6);
+// A1: image-based lighting — without any environment the photo-textured
+// buildings read near-black in daylight (their materials get only the
+// hemisphere + sun). A RoomEnvironment PMREM gives every standard
+// material a neutral ambient to reflect. This is a visual fix, not a
+// perf fix (an envmap lookup costs slightly MORE per pixel).
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+  pmrem.dispose();
+}
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 8000);
 camera.position.set(400, 260, 400);
@@ -1522,6 +1600,21 @@ document.getElementById('kickBtn').addEventListener('click', () => startAction('
 document.getElementById('comboBtn').addEventListener('click', () => startAction('combo'));
 document.getElementById('drinkBtn').addEventListener('click', () => drinkWater());
 
+// C: HUD grouping — combat buttons fold into one group (2x2 when open),
+// the stats line folds into its own row. Both start collapsed: normally
+// only the most-used controls show.
+document.getElementById('combatToggle').addEventListener('click', () => {
+  const grid = document.getElementById('combatGrid');
+  const open = grid.classList.toggle('open');
+  document.getElementById('combatToggle').textContent = open ? '🥊 戰鬥 ▾' : '🥊 戰鬥 ▸';
+});
+document.getElementById('statsToggle').addEventListener('click', () => {
+  const p = document.getElementById('stats');
+  const open = p.style.display === 'none';
+  p.style.display = open ? '' : 'none';
+  document.getElementById('statsToggle').textContent = open ? '統計 ▾' : '統計 ▸';
+});
+
 function spawnCharacter() {
   // resetting the view from inside the room: leave the room state
   // (exitRoom already clears this; this covers the reset path)
@@ -1623,8 +1716,10 @@ function setMode(m) {
   if (sleepState !== 'awake') cancelSleep();
   mode = m;
   syncTouchFlyButtons();
-  // first-time hint: name the two nearest interactions (car + bench)
-  if (m === 'walk' && !walkHintShown) {
+  // first-time hint: name the two nearest interactions (car + bench).
+  // Suppressed while the onboarding route runs — its first two steps
+  // teach the same thing, and the toast would just be noise.
+  if (m === 'walk' && !walkHintShown && !onboardActive) {
     walkHintShown = true;
     showToast(isMobile
       ? '走到車旁點「上車」開車，走到長椅點「坐下」休息'
@@ -1697,6 +1792,10 @@ function onLoaded(gltf, name) {
   loadRoadData();
   loadCamAABBs();
   setMode(mode); // apply the current mode to the fresh model
+  // B: the map loaded — whatever quality was pending is no longer a crash
+  lsDel('projectgo_oom_pending');
+  document.getElementById('retry-row').style.display = 'none';
+  startOnboarding(); // first visit only (flagged visits skip inside)
   // Bryce loads only after the map is done, on all devices: on mobile
   // the two big .glb parses must not spike memory at the same time
   // (iOS kills the tab), and on desktop the 59MB download should not
@@ -1709,16 +1808,27 @@ function onLoaded(gltf, name) {
 
 function onError(err) {
   console.error(err);
-  setStatus('載入失敗：' + (err && err.message ? err.message : err), true);
+  setStatus('載入失敗：' + (err && err.message ? err.message : err) + '。可以按「重試載入」再試一次。', true);
   barWrap.style.display = 'none';
+  // principle 1: an error needs a way out, not just a message
+  if (lastLoadAttempt) document.getElementById('retry-row').style.display = '';
   // the error lives in #hud — if the UI is collapsed, expand it so the
   // failure is actually visible instead of silent
   setUICollapsed(false);
 }
 
+let lastLoadAttempt = null; // () => void — re-runs the last map load (retry button)
 function loadFromUrl(url, name) {
   setStatus('載入中：' + name);
   showProgress(0);
+  // B: mark the quality as "loading" — onLoaded clears it, so a flag
+  // still set on the NEXT page load means this load crashed (OOM) and
+  // the entry block downgrades the quality instead of retrying blind.
+  const q = url.includes('_ulite') ? 'ulite' : url.includes('_lite') ? 'lite'
+    : url.includes('full_tst_tile') ? 'full' : null;
+  if (q) lsSet('projectgo_oom_pending', q);
+  lastLoadAttempt = () => loadFromUrl(url, name);
+  document.getElementById('retry-row').style.display = 'none';
   loader.load(url, (g) => onLoaded(g, name), (e) => {
     if (e.total > 0) showProgress(e.loaded / e.total);
   }, onError);
@@ -1731,6 +1841,7 @@ function loadFromFile(file) {
   if (qc) qc.style.display = 'none';
   const mm = document.getElementById('main-menu');
   if (mm) mm.style.display = 'none';
+  syncZoomLock();
   setStatus('讀取檔案：' + file.name);
   showProgress(0.5);
   const reader = new FileReader();
@@ -1761,6 +1872,35 @@ function tryCandidates(candidates) {
 }
 const choiceEl = document.getElementById('quality-choice');
 const mainMenuEl = document.getElementById('main-menu');
+// B: did the last visit die mid-load? Downgrade one step (Full->Lite->
+// ulite) and say so; ulite has nowhere to go, so it just warns.
+// Copy is provisional (instruction doc: 提示文案再定).
+const oomPending = lsGet('projectgo_oom_pending');
+const oomTarget = oomPending === 'full' ? 'lite' : oomPending === 'lite' ? 'ulite' : null;
+const oomNoteEl = document.getElementById('oom-note');
+if (oomTarget) {
+  oomNoteEl.textContent = oomPending === 'full'
+    ? '上次載入 Full 時瀏覽器崩潰了，這次自動改用 Lite。'
+    : '上次載入 Lite 時瀏覽器崩潰了，這次自動改用超輕量版。';
+  oomNoteEl.style.display = '';
+} else if (oomPending === 'ulite') {
+  oomNoteEl.textContent = '上次連最輕的畫質也載入失敗，請重試，或換一部裝置再試。';
+  oomNoteEl.style.display = '';
+}
+// principle 2 (auto-Lite): weak devices skip the quality choice and
+// go straight to Lite — asking a phone user to pick Full is how the
+// tab gets killed. deviceMemory is Chrome-only; elsewhere the game's
+// own mobile definition decides.
+function shouldAutoLite() {
+  try {
+    if (typeof navigator.deviceMemory === 'number') return navigator.deviceMemory <= 4;
+  } catch (e) { /* ignore */ }
+  return isMobile;
+}
+function loadRecovery(target) {
+  const file = target === 'lite' ? './full_tst_tile_lite.glb' : './full_tst_tile_ulite.glb';
+  loadFromUrl(file, file.slice(2));
+}
 if (modelParam) {
   // direct load: skip the main menu AND the quality choice
   mainMenuEl.style.display = 'none';
@@ -1768,20 +1908,55 @@ if (modelParam) {
   loadFromUrl(modelParam, modelParam.split('/').pop());
 } else {
   setStatus('請選擇畫質：Lite 或 Full');
-  // main menu first: start -> quality choice -> load
+  // main menu first: start -> (recovery / auto-Lite / quality choice) -> load
   document.getElementById('menu-start').addEventListener('click', () => {
     mainMenuEl.style.display = 'none';
+    if (oomTarget) { choiceEl.style.display = 'none'; loadRecovery(oomTarget); syncZoomLock(); return; }
+    if (shouldAutoLite()) {
+      choiceEl.style.display = 'none';
+      showToast('已自動選擇輕量畫質', 3000);
+      tryCandidates(['./full_tst_tile_ulite.glb', './full_tst_tile_lite.glb', './full_tst_tile.glb']);
+      syncZoomLock();
+      return;
+    }
     choiceEl.style.display = 'flex';
+    syncZoomLock();
   });
   document.getElementById('qc-lite').addEventListener('click', () => {
     choiceEl.style.display = 'none';
     tryCandidates(['./full_tst_tile_ulite.glb', './full_tst_tile_lite.glb', './full_tst_tile.glb']);
+    syncZoomLock();
   });
   document.getElementById('qc-full').addEventListener('click', () => {
     choiceEl.style.display = 'none';
     tryCandidates(['./full_tst_tile.glb']);
+    syncZoomLock();
   });
 }
+// retry button (principle 1): re-runs the last map load
+document.getElementById('retryLoad').addEventListener('click', () => {
+  if (lastLoadAttempt) lastLoadAttempt();
+});
+// onboarding mechanism B: before the route is done, five of the seven
+// menu items are greyed + locked (still visible — the player sees the
+// whole game); tapping one explains instead of doing nothing. The
+// toast sits under the menu overlay (z 11 vs 30), so the explanation
+// goes into an inline note.
+(function lockMenuItems() {
+  if (lsGet('projectgo_onboarding_done') === '1') return;
+  const noteEl = document.getElementById('menu-lock-note');
+  document.querySelectorAll('[data-onboard-lock]').forEach((li) => {
+    li.classList.add('locked');
+    const tag = document.createElement('span');
+    tag.className = 'lock-tag';
+    tag.textContent = ' 🔒 完成新手引導後解鎖';
+    li.appendChild(tag);
+    li.addEventListener('click', () => {
+      noteEl.textContent = '🔒 這項要完成新手引導才解鎖——開始遊戲後跟著引導走完 4 站就解鎖。';
+      noteEl.style.display = '';
+    });
+  });
+})();
 
 // rigged character: loaded in onLoaded, after the map is done
 // (see there) — never before the user picks a quality.
@@ -2014,7 +2189,7 @@ window.addEventListener('keydown', (e) => {
     else if (e.code === 'KeyF') toggleVehicle();
     else if (e.code === 'KeyT') drinkWater();
     else if (e.code === 'KeyH') setUICollapsed(!uiCollapsed);
-    else if (e.code === 'Escape') { if (settingsOpen) closeSettings(); else setPauseMenu(!pauseOpen); }
+    else if (e.code === 'Escape') { if (dressupOpen) closeDressUp(); else if (settingsOpen) closeSettings(); else setPauseMenu(!pauseOpen); }
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -2043,6 +2218,7 @@ function setPauseMenu(open) {
   }
   pauseOpen = open;
   pauseMenuEl.style.display = open ? 'flex' : 'none';
+  syncZoomLock();
 }
 document.getElementById('pause-resume').addEventListener('click', () => setPauseMenu(false));
 document.getElementById('pause-restart').addEventListener('click', () => location.reload());
@@ -2073,12 +2249,14 @@ function openSettings() {
   syncSettingsUI();
   settingsOpen = true;
   settingsMenuEl.style.display = 'flex';
+  syncZoomLock();
 }
 function closeSettings() {
   // straight back to the game: the pause menu is already closed
   // (openSettings closes it), so there is nothing to return to
   settingsOpen = false;
   settingsMenuEl.style.display = 'none';
+  syncZoomLock();
 }
 document.getElementById('pause-settings').addEventListener('click', () => openSettings());
 document.getElementById('settings-back').addEventListener('click', closeSettings);
@@ -2156,6 +2334,40 @@ document.querySelectorAll('.swatch').forEach((b) => {
     syncDressUpUI();
   });
 });
+
+// ---------- dress-up panel (in the room wardrobe) ----------
+// A moved the swatches out of settings into their own overlay, opened
+// from the wardrobe in the personal room (E / context button).
+const dressupMenuEl = document.getElementById('dressup-menu');
+let dressupOpen = false;
+function openDressUp() {
+  if (!bryce) { showToast('角色尚未載入', 2000); return; }
+  syncDressUpUI();
+  dressupOpen = true;
+  dressupMenuEl.style.display = 'flex';
+  syncZoomLock();
+}
+function closeDressUp() {
+  dressupOpen = false;
+  dressupMenuEl.style.display = 'none';
+  syncZoomLock();
+}
+document.getElementById('dressup-close').addEventListener('click', closeDressUp);
+
+// ---------- D: pinch-zoom lock ----------
+// In-game the viewport stays locked (maximum-scale=1) so a stray
+// pinch never zooms the game away; on any menu screen the lock lifts
+// so the player can zoom the text. One function re-reads which
+// overlays are visible, called on every open/close transition.
+const viewportMeta = document.getElementById('viewport-meta');
+const VIEWPORT_LOCKED = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+const VIEWPORT_FREE = 'width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes';
+function syncZoomLock() {
+  const anyMenuOpen = [mainMenuEl, choiceEl, pauseMenuEl, settingsMenuEl, dressupMenuEl]
+    .some((el) => el && getComputedStyle(el).display !== 'none');
+  viewportMeta.setAttribute('content', anyMenuOpen ? VIEWPORT_FREE : VIEWPORT_LOCKED);
+}
+syncZoomLock(); // main menu is up at load: start unlocked
 
 // ---------- touch controls (mobile) ----------
 // Virtual joystick (bottom-left) moves the character; drag anywhere else
@@ -2753,7 +2965,7 @@ const PET_FOLLOW_SIDE = 0.5;   // metres to the player's right
 const PET_STOP_DIST = 1.0;     // stop and idle within this of the target
 const PET_SNAP_DIST = 30;      // snap back if further than this (horizontal)
 const PET_MIN_SPEED = 2.5;     // m/s, amble when the player is idle
-const PET_MAX_SPEED = 32;      // m/s, must outrun a buffed run (30 m/s)
+const PET_MAX_SPEED = 32;      // m/s, must outrun a buffed run (12 m/s)
 const PET_CATCHUP_MULT = 1.35; // dog speed = player speed x this, clamped
 
 let pet = null; // { group, yaw, legs: {fl,fr,rl,rr}, ears: {l,r}, tail, phase, moving }
@@ -3271,6 +3483,7 @@ const FALL_DAMAGE_CAP = 50;  // max health lost in a single fall
 let health = HEALTH_MAX;
 let speedBuffUntil = 0; // clock.elapsedTime when the run-speed buff ends
 let lastEatAt = -EAT_COOLDOWN;
+let eatCount = 0; // meals eaten this page load (onboarding step 4 watches it)
 let fallStartY = null; // takeoff height while airborne (null = grounded)
 
 function createStall() {
@@ -3387,6 +3600,7 @@ function updateBuffUI() {
 }
 
 function applyEatEffects() {
+  eatCount++;
   health = Math.min(HEALTH_MAX, health + EAT_HEAL);
   speedBuffUntil = clock.elapsedTime + SPEED_BUFF_SECS;
   lastEatAt = clock.elapsedTime;
@@ -3603,20 +3817,23 @@ function sleepFadeFallback() {
 }
 
 function trySleep() {
-  if (!bed) return;
+  // A: the room bed sleeps exactly like the plaza bed — which bed is
+  // active depends on where the player is standing
+  const activeBed = inRoom ? roomBed : bed;
+  if (!activeBed) return;
   if (mode !== 'walk' || flying) return;
   if (sitState !== 'stand') return; // not while sitting down
   if (carState !== 'none') return; // not while in the car
   if (bikeState !== 'none') return; // not while riding
   if (sleepState === 'awake') {
-    const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
+    const d = Math.hypot(charPos.x - activeBed.pos.x, charPos.z - activeBed.pos.z);
     if (d > SLEEP_RANGE) return;
     if (bryce && bryce.oneShot) return; // wait for a move to finish
     sleepState = 'lying';
     // snap to the sleep spot (v1: no walk-up animation), like toggleSit
-    charPos.copy(bed.sleepPos);
+    charPos.copy(activeBed.sleepPos);
     charPos.y += SLEEP_Y_OFFSET; // the clip lies the body ~0.85m above the origin; sink it onto the mattress
-    charYaw = bed.sleepYaw;
+    charYaw = activeBed.sleepYaw;
     charGroup.position.copy(charPos);
     charGroup.rotation.y = charYaw;
     if (bryce) {
@@ -3680,12 +3897,13 @@ const sleepPromptEl = document.getElementById('sleep-prompt');
 let lastSleepPrompt = null;
 function updateSleepPrompt() {
   let text = '';
-  if (bed && mode === 'walk') {
+  const activeBed = inRoom ? roomBed : bed;
+  if (activeBed && mode === 'walk') {
     // only the steady clip-path sleep offers waking: the 'lying' /
     // 'waking' fades ignore E, and the no-clip fallback wakes itself
     if (sleepState === 'asleep' && sleepClipPath) text = '按 E 起床';
     else if (sleepState === 'awake' && !flying && sitState === 'stand' && carState === 'none') {
-      const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
+      const d = Math.hypot(charPos.x - activeBed.pos.x, charPos.z - activeBed.pos.z);
       if (d <= SLEEP_RANGE) text = '按 E 睡覺';
     }
   }
@@ -3704,21 +3922,34 @@ function tryInteract() {
   if (sleepState !== 'awake') { trySleep(); return; }
   if (sitState !== 'stand') { toggleSit(); return; }
   let best = null, bestD = Infinity;
-  if (bench) {
-    const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
-    if (d <= SIT_RANGE && d < bestD) { best = 'sit'; bestD = d; }
-  }
-  if (stall) {
-    const d = Math.hypot(charPos.x - stall.pos.x, charPos.z - stall.pos.z);
-    if (d <= EAT_RANGE && d < bestD) { best = 'eat'; bestD = d; }
-  }
-  if (bed) {
-    const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
-    if (d <= SLEEP_RANGE && d < bestD) { best = 'sleep'; bestD = d; }
+  if (inRoom) {
+    // room interactions only: the bed sleeps, the wardrobe opens dress-up
+    if (roomBed) {
+      const d = Math.hypot(charPos.x - roomBed.pos.x, charPos.z - roomBed.pos.z);
+      if (d <= SLEEP_RANGE && d < bestD) { best = 'sleep'; bestD = d; }
+    }
+    if (roomWardrobe) {
+      const d = Math.hypot(charPos.x - roomWardrobe.pos.x, charPos.z - roomWardrobe.pos.z);
+      if (d <= WARDROBE_RANGE && d < bestD) { best = 'dressup'; bestD = d; }
+    }
+  } else {
+    if (bench) {
+      const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
+      if (d <= SIT_RANGE && d < bestD) { best = 'sit'; bestD = d; }
+    }
+    if (stall) {
+      const d = Math.hypot(charPos.x - stall.pos.x, charPos.z - stall.pos.z);
+      if (d <= EAT_RANGE && d < bestD) { best = 'eat'; bestD = d; }
+    }
+    if (bed) {
+      const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
+      if (d <= SLEEP_RANGE && d < bestD) { best = 'sleep'; bestD = d; }
+    }
   }
   if (best === 'sit') toggleSit();
   else if (best === 'eat') eatFood();
   else if (best === 'sleep') trySleep();
+  else if (best === 'dressup') openDressUp();
 }
 
 function updateDrive(dt) {
@@ -4131,11 +4362,26 @@ const CTX_LABELS = {
   eat: '🍜 吃飯 (E)',
   sleep: '🛏️ 睡覺 (E)',
   car: '🚗 上車 (F)',
-  bike: '🏍️ 騎車 (F)'
+  bike: '🏍️ 騎車 (F)',
+  dressup: '👔 換裝 (E)'
 };
 function updateContextButton() {
   let action = null;
-  if (mode === 'walk' && !inRoom) {
+  if (mode === 'walk' && inRoom) {
+    // A: the room offers its own interactions (bed + wardrobe)
+    if (sleepState === 'asleep' && sleepClipPath) action = 'wake';
+    else if (!flying) {
+      let bestD = Infinity;
+      if (roomBed) {
+        const d = Math.hypot(charPos.x - roomBed.pos.x, charPos.z - roomBed.pos.z);
+        if (d <= SLEEP_RANGE && d < bestD) { action = 'sleep'; bestD = d; }
+      }
+      if (roomWardrobe) {
+        const d = Math.hypot(charPos.x - roomWardrobe.pos.x, charPos.z - roomWardrobe.pos.z);
+        if (d <= WARDROBE_RANGE && d < bestD) { action = 'dressup'; bestD = d; }
+      }
+    }
+  } else if (mode === 'walk' && !inRoom) {
     // exits first (same order as tryInteract / toggleVehicle) — only
     // steady states offer an exit: during a 1s transition ('sitting' /
     // 'standing' / 'entering' / 'exiting' / 'mounting' / 'lying' /
@@ -4199,6 +4445,7 @@ function doContextAction() {
     case 'sit': toggleSit(); break;
     case 'eat': eatFood(); break;
     case 'sleep': trySleep(); break;
+    case 'dressup': openDressUp(); break;
     case 'car': toggleCar(); break;
     case 'bike': tryBike(); break;
   }
@@ -4272,9 +4519,13 @@ const ROOM_HALF_Z = 3.4; // walkable half-depth (walls at ±4.0, 0.6m margin)
 let inRoom = false;
 let roomGroup = null;
 let roomCenter = null; // THREE.Vector3, world coords of the room centre at floor level
+let roomBed = null; // { pos, sleepPos, sleepYaw } — A: the room bed sleeps (world coords)
+let roomWardrobe = null; // { pos } — A: wardrobe interaction point (world coords)
+const WARDROBE_RANGE = 2.5;
+let savedCam = null; // D3: camera saved on enterRoom, restored on exitRoom
 
 function createRoom() {
-  if (roomGroup) { scene.remove(roomGroup); roomGroup = null; roomCenter = null; }
+  if (roomGroup) { scene.remove(roomGroup); roomGroup = null; roomCenter = null; roomBed = null; roomWardrobe = null; }
   if (!model) return;
   const sx = SPAWN_RAW.x - modelCenter.x;
   const sz = SPAWN_RAW.z - modelCenter.z;
@@ -4324,7 +4575,7 @@ function createRoom() {
   box(0.08, 1.56, 0.06, wood, 1.24, 1.8, -3.97);
   box(0.05, 1.4, 0.04, wood, 0, 1.8, -3.96);
   box(2.4, 0.05, 0.04, wood, 0, 1.8, -3.96);
-  // bed (visual only — no sleep trigger in the room; sleeping uses the plaza bed)
+  // bed (A: sleepable — see roomBed below; pillow at the north end)
   box(1.2, 0.3, 2.2, wood, -3.6, 0.15, -2.6);
   box(1.1, 0.18, 2.1, white, -3.6, 0.39, -2.6);
   box(0.9, 0.12, 0.5, paleBlue, -3.6, 0.52, -3.4);
@@ -4339,6 +4590,18 @@ function createRoom() {
   box(0.05, 0.45, 0.05, darkMetal, 3.6, 0.225, -1.9);
   // rug
   box(2.4, 0.02, 1.6, rugMat, 0, 0.01, -0.5);
+  // wardrobe + mirror (A: dress-up moved here from settings). Tall
+  // cabinet on the east wall, mirror on its room-facing side.
+  box(0.7, 2.2, 1.6, wood, 4.45, 1.1, 1.6);
+  box(0.04, 2.0, 0.7, darkMetal, 4.08, 1.1, 1.2); // left door seam
+  box(0.04, 2.0, 0.7, darkMetal, 4.08, 1.1, 2.0); // right door seam
+  const mirror = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.2, 1.8),
+    new THREE.MeshBasicMaterial({ color: 0xcfe8ff })
+  );
+  mirror.rotation.y = -Math.PI / 2; // faces west, into the room
+  mirror.position.set(4.07, 1.15, 1.6);
+  g.add(mirror);
   // the ceiling blocks the sun, so the room needs its own light
   // (intensity is a first guess — tune after the first visual check)
   const lamp = new THREE.PointLight(0xffe6b8, 40, 15, 1.8);
@@ -4350,13 +4613,36 @@ function createRoom() {
   scene.add(g);
   roomGroup = g;
   roomCenter = new THREE.Vector3(sx, ROOM_Y, sz);
+  // A: room bed sleep spot — the sleeper faces south (+Z, yaw 0), so
+  // the head lands 0.53m north of the origin, on the pillow (-3.4);
+  // origin z -2.87 puts the head at -3.40 and the feet inside the bed
+  roomBed = {
+    pos: new THREE.Vector3(sx - 3.6, ROOM_Y, sz - 2.6),
+    sleepPos: new THREE.Vector3(sx - 3.6, ROOM_Y, sz - 2.87),
+    sleepYaw: 0
+  };
+  // wardrobe interaction point: the front face (west side)
+  roomWardrobe = { pos: new THREE.Vector3(sx + 4.1, ROOM_Y, sz + 1.6) };
+}
+
+// principle 1: a blocked entry says WHY, in plain words — the old
+// "現在不能進入房間" never said what to do about it
+function roomEnterBlockReason() {
+  if (!model || !roomGroup) return '先開始遊戲，載入地圖後才能進入房間';
+  if (inRoom) return null;
+  if (mode !== 'walk' || flying) return '飛行時不能進房間，先切回步行';
+  if (sitState !== 'stand') return '坐著時不能進房間，先站起來';
+  if (carState !== 'none') return '開車時不能進房間，先下車';
+  if (bikeState !== 'none') return '騎車時不能進房間，先下車';
+  if (sleepState !== 'awake') return '睡覺時不能進房間，先起床';
+  return null;
 }
 
 function enterRoom() {
-  if (inRoom || !model || !roomGroup) return false;
-  if (mode !== 'walk' || flying) return false;
-  if (sitState !== 'stand' || carState !== 'none' || bikeState !== 'none' || sleepState !== 'awake') return false;
+  if (inRoom) return false;
+  if (roomEnterBlockReason()) return false;
   fallStartY = null; // a teleport is not a fall
+  savedCam = { yaw: camYaw, pitch: camPitch, dist: camDist }; // D3
   inRoom = true;
   roomGroup.visible = true;
   // spawn at the room centre, facing north (into the room, toward the bed/window)
@@ -4384,6 +4670,13 @@ function exitRoom() {
   syncRoomButton();
   showToast('離開房間', 1500);
   spawnCharacter(); // back to the pier plaza (also resets the camera)
+  // D3: back to the exact view from before entering (spawnCharacter
+  // resets the camera to its default; this restores the saved one)
+  if (savedCam) {
+    camYaw = savedCam.yaw; camPitch = savedCam.pitch; camDist = savedCam.dist;
+    savedCam = null;
+    updateWalkCamera();
+  }
   return true;
 }
 
@@ -4394,6 +4687,8 @@ function toggleRoom() {
     return false;
   }
   if (inRoom) return exitRoom();
+  const reason = roomEnterBlockReason();
+  if (reason) { showToast(reason, 2500); return false; }
   if (!enterRoom()) {
     showToast('現在不能進入房間', 2000);
     return false;
@@ -4405,13 +4700,17 @@ function clampToRoom() {
   if (!roomCenter) return;
   charPos.x = THREE.MathUtils.clamp(charPos.x, roomCenter.x - ROOM_HALF_X, roomCenter.x + ROOM_HALF_X);
   charPos.z = THREE.MathUtils.clamp(charPos.z, roomCenter.z - ROOM_HALF_Z, roomCenter.z + ROOM_HALF_Z);
-  // furniture collision: bed + table as AABBs (room-local coords,
-  // expanded by the 0.4m player radius) — without this Bryce walks onto
-  // the mattress (test 9). Push out along the axis of least penetration.
+  // furniture collision: bed + table + wardrobe as AABBs (room-local
+  // coords, expanded by the 0.4m player radius) — without this Bryce
+  // walks onto the mattress (test 9). Push out along the axis of least
+  // penetration. Skipped while asleep: the sleeper is meant to be on
+  // the bed (same rule as collideBed outside).
+  if (sleepState !== 'awake') return;
   const lx = charPos.x - roomCenter.x, lz = charPos.z - roomCenter.z;
   const boxes = [
     [-4.6, -2.6, -4.1, -1.1], // bed (frame 1.2 x 2.2 at -3.6, -2.6)
     [2.4, 4.8, -3.6, -2.0], // table (1.6 x 0.8 at 3.6, -2.8)
+    [3.9, 5.0, 0.4, 2.8], // wardrobe (0.7 x 1.6 at 4.45, 1.6)
   ];
   for (const [minX, maxX, minZ, maxZ] of boxes) {
     if (lx < minX || lx > maxX || lz < minZ || lz > maxZ) continue;
@@ -4488,7 +4787,7 @@ function updateWalk(dt) {
     move.normalize();
     // food-stall speed buff: run speed x1.2 while it lasts (walk speed
     // and flight are unaffected)
-    const runSpeed = (clock.elapsedTime < speedBuffUntil) ? 25 * SPEED_BUFF_MULT : 25;
+    const runSpeed = (clock.elapsedTime < speedBuffUntil) ? 10 * SPEED_BUFF_MULT : 10;
     const speed = (flying ? (running ? 60 : 30) : (running ? runSpeed : 6)) * mag;
     charPos.addScaledVector(move, speed * dt);
     // face the movement direction (smooth turn)
@@ -4522,9 +4821,12 @@ function updateWalk(dt) {
   // hoisted — the groundHeight calls keep their original order and refY)
   let gy;
   if (inRoom) {
-    // personal room: flat floor at ROOM_Y, no map ground, no flying
+    // personal room: flat floor at ROOM_Y, no map ground, no flying.
+    // Asleep in the room bed, the origin rides SLEEP_Y_OFFSET below
+    // the floor (same as the plaza bed) so the body lands on the
+    // mattress instead of floating above it.
     gy = ROOM_Y;
-    charPos.y = ROOM_Y;
+    charPos.y = (sleepState !== 'awake') ? ROOM_Y + SLEEP_Y_OFFSET : ROOM_Y;
     flying = false;
   } else if (flying) {
     charPos.y += vy * dt;
@@ -4616,6 +4918,112 @@ function updateFly(dt) {
   controls.update();
 }
 
+// ---------- onboarding: first-run guided route (mechanism A) ----------
+// Four stops near the spawn (car -> bench -> room -> food stall); one
+// floating marker at a time, a step bar in #help's slot, per-step skip
+// and skip-all. Finishing or skipping sets projectgo_onboarding_done.
+// Full design: ~/workspace/onboarding/onboarding-spec.md.
+const ONBOARD_KEY = 'projectgo_onboarding_done';
+const ONBOARD_STEPS = [
+  { station: 'car', text: '走到車旁，按 F 上車', textTouch: '走到車旁，點「上車」' },
+  { station: 'bench', text: '走到長椅，按 E 坐下', textTouch: '走到長椅，點「坐下」' },
+  { station: 'room', text: '打開選單 → 設定 → 進入個人房間', textTouch: '打開選單 → 設定 → 進入個人房間' },
+  { station: 'stall', text: '走到大排檔，按 E 吃飯', textTouch: '走到大排檔，點「吃飯」' },
+];
+let onboardActive = false;
+let onboardStep = 0;
+let onboardStepEatCount = 0;
+let onboardMarker = null;
+let lastOnboardText = null;
+const onboardBarEl = document.getElementById('onboard-bar');
+const onboardTextEl = document.getElementById('onboard-text');
+
+function onboardStationPos() {
+  // world position of the current step's station (null for the room step)
+  const s = ONBOARD_STEPS[onboardStep].station;
+  if (s === 'car') return car ? car.pos : null;
+  if (s === 'bench') return bench ? bench.pos : null;
+  if (s === 'stall') return stall ? stall.pos : null;
+  return null;
+}
+
+function updateOnboardUI() {
+  if (!onboardActive) return;
+  const step = ONBOARD_STEPS[onboardStep];
+  let text = '第 ' + (onboardStep + 1) + ' 步：';
+  // steps 2-4 need walking: if the player is driving/riding/seated,
+  // say so first (uyu 21:19: 動態前綴，推廣到所有需步行的站)
+  const onFoot = carState === 'none' && bikeState === 'none' && sitState === 'stand';
+  if (onboardStep > 0 && !onFoot) text += '先下車／站起，' + (onboardStep === 2 ? '再' : '');
+  text += isMobile ? step.textTouch : step.text;
+  if (text !== lastOnboardText) {
+    lastOnboardText = text;
+    onboardTextEl.textContent = text;
+  }
+}
+
+function onboardNext() {
+  onboardStep++;
+  if (onboardStep >= ONBOARD_STEPS.length) { finishOnboarding(); return; }
+  if (ONBOARD_STEPS[onboardStep].station === 'stall') onboardStepEatCount = eatCount;
+  lastOnboardText = null;
+  updateOnboardUI();
+}
+
+function finishOnboarding() {
+  onboardActive = false;
+  lsSet(ONBOARD_KEY, '1');
+  document.body.classList.remove('onboarding');
+  onboardBarEl.classList.remove('show');
+  if (onboardMarker) { scene.remove(onboardMarker); onboardMarker = null; }
+  lastOnboardText = null;
+}
+
+function startOnboarding() {
+  if (onboardActive || lsGet(ONBOARD_KEY) === '1') return;
+  if (!model) return;
+  onboardActive = true;
+  onboardStep = 0;
+  document.body.classList.add('onboarding');
+  onboardBarEl.classList.add('show');
+  if (!onboardMarker) {
+    onboardMarker = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.55),
+      new THREE.MeshBasicMaterial({ color: 0xffd166 })
+    );
+    scene.add(onboardMarker);
+  }
+  lastOnboardText = null;
+  updateOnboardUI();
+}
+
+document.getElementById('onboardSkipStep').addEventListener('click', () => { if (onboardActive) onboardNext(); });
+document.getElementById('onboardSkipAll').addEventListener('click', () => { if (onboardActive) finishOnboarding(); });
+
+function updateOnboarding() {
+  if (!onboardActive) return;
+  // marker: float + spin above the current station (no marker for the
+  // room step — it is a UI step, the bar spells out the path)
+  if (onboardMarker) {
+    const pos = onboardStationPos();
+    if (pos) {
+      onboardMarker.visible = true;
+      onboardMarker.position.set(pos.x, pos.y + 2.5 + Math.sin(clock.elapsedTime * 2) * 0.3, pos.z);
+      onboardMarker.rotation.y = clock.elapsedTime * 1.5;
+    } else {
+      onboardMarker.visible = false;
+    }
+  }
+  // completion: the step's action happened (state checks, no hooks)
+  let done = false;
+  if (onboardStep === 0 && carState === 'driving') done = true;
+  else if (onboardStep === 1 && sitState === 'seated') done = true;
+  else if (onboardStep === 2 && inRoom) done = true;
+  else if (onboardStep === 3 && eatCount > onboardStepEatCount) done = true;
+  if (done) onboardNext();
+  else updateOnboardUI();
+}
+
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -4634,6 +5042,7 @@ function animate() {
   updateSleepPrompt();
   updateContextButton();
   updateBuffUI();
+  updateOnboarding();
   updateShadowFocus();
   updateNavHud(dt);
   renderer.render(scene, camera);
