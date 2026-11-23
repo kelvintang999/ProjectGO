@@ -270,7 +270,6 @@
     <p class="sub">尖沙咀 3D · 自由探索</p>
     <p class="pitch">在尖沙咀自由探索——步行、開車、騎車、坐下休息、打拳</p>
     <button id="menu-start" class="qc-btn menu-start">開始遊戲</button>
-    <button id="menu-settings" class="qc-btn secondary menu-start">設定</button>
     <p class="menu-section">可以做的事</p>
     <ul class="menu-list">
       <li>🚶 <span class="label">步行探索</span>——尖沙咀碼頭、海濱、廣東道</li>
@@ -1866,30 +1865,25 @@ document.getElementById('pause-restart').addEventListener('click', () => locatio
 document.getElementById('menuBtn').addEventListener('click', () => setPauseMenu(!pauseOpen));
 
 // ---------- settings screen ----------
-// Opened from the main menu or the pause menu (z 32, above both); the
-// back button (or Esc) returns to whichever menu opened it. The three
+// Opened from the pause menu only (in-game, z 32, above it); the back
+// button (or Esc) returns to the pause menu. Pre-game settings were
+// removed 2026-11-23 (user: nothing in here is usable before the game
+// starts) — the main menu has no 設定 button any more. The three
 // toggles share one state variable each with the HUD buttons (shadowsOn
 // / nightMode / navMode): toggling here calls the same setters, so the
 // HUD text updates at once; opening the screen re-reads the variables,
 // so HUD toggles made while it was closed show up correctly.
 const settingsMenuEl = document.getElementById('settings-menu');
 let settingsOpen = false;
-let settingsReturn = 'main'; // 'main' | 'pause': which menu opened settings
 function syncSettingsUI() {
   document.querySelector('#set-shadow .set-val').textContent = shadowsOn ? '開' : '關';
   document.querySelector('#set-night .set-val').textContent = nightMode ? '開' : '關';
   document.querySelector('#set-nav .set-val').textContent = navMode ? '開' : '關';
-  // the room only opens in-game — hide its section when settings was
-  // opened from the main menu (pre-game)
-  const roomSection = document.getElementById('set-room-section');
-  if (roomSection) roomSection.style.display = settingsReturn === 'pause' ? '' : 'none';
   syncRoomButton();
   syncDressUpUI();
 }
-function openSettings(from) {
-  settingsReturn = from;
-  if (from === 'pause') setPauseMenu(false);
-  else mainMenuEl.style.display = 'none';
+function openSettings() {
+  setPauseMenu(false);
   syncSettingsUI();
   settingsOpen = true;
   settingsMenuEl.style.display = 'flex';
@@ -1897,11 +1891,9 @@ function openSettings(from) {
 function closeSettings() {
   settingsOpen = false;
   settingsMenuEl.style.display = 'none';
-  if (settingsReturn === 'pause') setPauseMenu(true);
-  else mainMenuEl.style.display = 'flex';
+  setPauseMenu(true);
 }
-document.getElementById('menu-settings').addEventListener('click', () => openSettings('main'));
-document.getElementById('pause-settings').addEventListener('click', () => openSettings('pause'));
+document.getElementById('pause-settings').addEventListener('click', () => openSettings());
 document.getElementById('settings-back').addEventListener('click', closeSettings);
 document.getElementById('set-shadow').addEventListener('click', () => { setShadows(!shadowsOn); syncSettingsUI(); });
 document.getElementById('set-night').addEventListener('click', () => { setNightMode(!nightMode); syncSettingsUI(); });
@@ -3985,8 +3977,8 @@ function syncRoomButton() {
 }
 
 // settings button: enter/exit, then drop straight into the game —
-// closeSettings reopens the pause menu by its return logic, so close
-// that too instead of leaving the player behind two overlays.
+// closeSettings reopens the pause menu, so close that too instead of
+// leaving the player behind two overlays.
 document.getElementById('set-room').addEventListener('click', () => {
   if (!toggleRoom()) return; // guards failed (toast already shown); stay in settings
   closeSettings();
