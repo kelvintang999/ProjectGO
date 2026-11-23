@@ -281,6 +281,7 @@
       <p><span class="touch-help">左搖桿移動 · 拖曳轉鏡頭 · 右下按鈕：跑／升／降 · 開車／騎車：搖桿上推加速、左右轉向</span><span class="kb-help">WASD 移動 · Shift 跑 · 空白鍵飛 · 滑鼠轉鏡頭 · 滾輪縮放 · E 坐下 · F 上車／騎車 · T 喝水 · H 收起介面 · Esc 選單</span></p>
     </div>
     <p class="note">地圖資料：香港特區政府地政總署 · 3D-BIT00 · CSDI</p>
+    <p class="note" id="version-menu"></p>
   </div>
 </div>
 <div id="pause-menu">
@@ -374,6 +375,11 @@ const barWrap = document.getElementById('bar-wrap');
 const barEl = document.getElementById('bar');
 const fileInput = document.getElementById('file');
 const dropHint = document.getElementById('drop-hint');
+
+// Build label (test 11⑩: nothing on the page showed the version).
+// Shown on the main menu + the HUD stats line; bump on every push.
+const BUILD_VERSION = '2026-11-23-3';
+document.getElementById('version-menu').textContent = '版本 ' + BUILD_VERSION;
 
 // ---------- renderer / scene ----------
 // Mobile (touch / narrow screen) gets the lite treatment: no antialias,
@@ -1705,10 +1711,36 @@ function setShadows(on) {
 // which GPU is the browser actually using? (dual-GPU laptops often run
 // Chrome on the integrated GPU, which is the #1 cause of low FPS here)
 const gl = renderer.getContext();
+// UNMASKED_RENDERER_WEBGL comes back in vendor-specific shapes:
+// Chrome/Edge on Windows report "ANGLE (NVIDIA, NVIDIA GeForce RTX
+// 3080 ... Direct3D11 ...)", macOS reports "ANGLE (Apple, ANGLE Metal
+// Renderer: Apple M1 Pro, ...)", and Brave's fingerprinting protection
+// farbles the whole string to just "Brave" (test 11⑨ showed 顯示卡：
+// Brave). Parse out the model; when the browser hides it, say so
+// instead of showing a browser name as if it were a GPU.
+function parseGpuName(raw) {
+  if (!raw) return '未知';
+  if (/^brave$/i.test(raw.trim())) return '未知（瀏覽器已隱藏）';
+  let s = raw.trim();
+  // ANGLE (VENDOR, MODEL ...): drop the wrapper + vendor, keep the model
+  const angle = s.match(/^ANGLE \([^,]+,\s*(.+)\)$/);
+  if (angle) s = angle[1];
+  // "ANGLE Metal Renderer: Apple M1 Pro" -> "Apple M1 Pro" (before the
+  // API split below, or " Metal" would cut the string to just "ANGLE")
+  s = s.replace(/^ANGLE Metal Renderer:\s*/i, '');
+  // strip the PCI id (" (0x00002498)")
+  s = s.replace(/\s*\(0x[0-9a-fA-F]+\)/g, '');
+  // strip the API suffix (" Direct3D11 vs_5_0 ps_5_0", " Vulkan ...",
+  // ", Unspecified Version"); keep the whole string if the cut leaves
+  // nothing (e.g. a renderer string that starts with "Vulkan")
+  const head = s.split(/ Direct3D\d*| vs_\d| ps_\d| OpenGL| Vulkan|,/)[0].trim();
+  s = head || s;
+  return s.trim() || '未知';
+}
 let gpuName = '未知';
 try {
   const ext = gl.getExtension('WEBGL_debug_renderer_info');
-  if (ext) gpuName = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || gpuName;
+  if (ext) gpuName = parseGpuName(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
 } catch (e) { /* ignore */ }
 
 // ---------- Star Ferry (procedural, sails TST <-> Central) ----------
@@ -1889,8 +1921,9 @@ document.getElementById('menuBtn').addEventListener('click', () => setPauseMenu(
 
 // ---------- settings screen ----------
 // Opened from the pause menu only (in-game, z 32, above it); the back
-// button (or Esc) returns to the pause menu. Pre-game settings were
-// removed 2026-11-23 (user: nothing in here is usable before the game
+// button (or Esc) returns straight to the game (test 11⑧ — returning
+// to the pause menu first forced an extra 繼續遊戲 tap every time).
+// Pre-game settings were removed 2026-11-23 (user: nothing in here is usable before the game
 // starts) — the main menu has no 設定 button any more. The three
 // toggles share one state variable each with the HUD buttons (shadowsOn
 // / nightMode / navMode): toggling here calls the same setters, so the
@@ -1912,9 +1945,10 @@ function openSettings() {
   settingsMenuEl.style.display = 'flex';
 }
 function closeSettings() {
+  // straight back to the game: the pause menu is already closed
+  // (openSettings closes it), so there is nothing to return to
   settingsOpen = false;
   settingsMenuEl.style.display = 'none';
-  setPauseMenu(true);
 }
 document.getElementById('pause-settings').addEventListener('click', () => openSettings());
 document.getElementById('settings-back').addEventListener('click', closeSettings);
@@ -2104,7 +2138,8 @@ function actionPose(now) {
 // stays as a fallback if the file is missing (e.g. before it is pushed
 // to the repo). Clips: Idle/Walking/Running (locomotion), Punching/
 // Kicking (martial arts, J/K/L), Entering Car/Exiting Car/Driving
-// (car, F), Sitting/Sitting Idle/Stand Up (bench, E), Drinking (T).
+// (car, F), Sitting/Sitting Idle/Stand Up (bench, E), Drinking (T),
+// Eating (stall, E), Sleeping (bed, E), Riding (bike, F).
 let bryce = null; // { group, mixer, clips, loco, oneShot, current }
 function loadBryce() {
   loader.load('./bryce_animated.glb', (g) => {
@@ -2144,12 +2179,16 @@ function playLoco(name) {
 // One-shot transition clips must finish in 1-2s (user rule 2026-11-23):
 // the raw Mixamo clips run 2-6s (Entering Car 5.50s, Exiting Car 5.83s),
 // so play them faster instead of waiting. timeScale is computed from
-// each clip's own duration, so future clips (Eating, Lie_Down) get the
-// same treatment automatically. The 'finished' event fires at the
-// sped-up end, so the state machine follows with no other change.
+// each clip's own duration, so newer clips get the same treatment
+// automatically. The 'finished' event fires at the sped-up end, so the
+// state machine follows with no other change.
 // NOTE: timeScale must be set AFTER bryceFadeTo — its reset() restores
 // timeScale to 1.
-const ONE_SHOT_TARGET = { 'Entering Car': 1.0, 'Exiting Car': 1.0, 'Sitting Down': 1.0, 'Stand Up': 1.0 };
+const ONE_SHOT_TARGET = { 'Entering Car': 1.0, 'Exiting Car': 1.0, 'Sitting Down': 1.0, 'Stand Up': 1.0,
+  // Eating is a 6.03s clip, so 2.0s means 3x speed — fast, but the 1-2s
+  // rule covers extra animations too; judge by playtest (slow it to
+  // 2.5-3s if the hand-to-mouth reads as a blur)
+  'Eating': 2.0 };
 const ONE_SHOT_DEFAULT = 1.5;
 function playOneShot(name, onDone) {
   if (!bryce || !bryce.clips[name] || bryce.oneShot) return false;
@@ -2193,6 +2232,7 @@ function drinkWater() {
   if (sitState !== 'stand') return; // not while sitting down
   if (carState !== 'none') return; // not while in the car
   if (bikeState !== 'none') return; // not while riding
+  if (sleepState !== 'awake') return; // not while asleep (persistent sleep made this reachable)
   playOneShot('Drinking');
 }
 
@@ -2862,11 +2902,11 @@ const CAR_RANGE = 3.5; // measured from the car CENTRE (like the bike):
 const CAR_ACCEL = 5.6, CAR_BRAKE = 20, CAR_DRAG = 0.4; // drag 0.4 (was 1.2 — at 5 m/s it braked harder than the engine accelerates; test 9/10)
 const CAR_MAX_SPEED = 19.5, CAR_MAX_FAST = 32.5, CAR_MAX_REVERSE = 5; // top speed +30%, accel -30% (2026-11-23 user)
 const CAR_DOOR_LOCAL = new THREE.Vector3(1.15, 0, 0.4);
-// Entering Car's root motion carries the character +1.76m forward (measured
-// headlessly, 2026-11-23), so the enter starts 1.76m BEHIND the door: the
-// clip then walks him exactly to the door instead of past the front bumper.
-// Range check still uses the door; only the snap point is offset.
-const CAR_ENTER_START_LOCAL = new THREE.Vector3(1.15, 0, -1.36);
+// The enter starts AT the door (same z as CAR_DOOR_LOCAL). The old
+// -1.36 offset compensated for Entering Car's +1.76m root motion; the
+// 19:00 Blender batch stripped that root motion (v2 .glb, verified:
+// hips forward constant 0.023m), so the offset would now overshoot.
+const CAR_ENTER_START_LOCAL = new THREE.Vector3(1.15, 0, 0.4);
 const CAR_SEAT_LOCAL = new THREE.Vector3(0.45, 0, 0.3); // seat at ground: measured seated headtop 1.420, roof underside 1.47 (5cm margin)
 
 function carLocalToWorld(local) {
@@ -3213,24 +3253,35 @@ function applyFallDamage(drop) {
   }
 }
 
-// ---------- bed + sleeping (KayKit Lie_Down / Sleeping / Lie_StandUp) ----------
+// ---------- bed + sleeping (KayKit 'Sleeping' loop + fades) ----------
 // One procedural bed on the pier plaza, 8m west of the spawn (bench is
 // 6m south, car 9m north, food stall 8m east — the four never crowd
-// each other). Sleeping restores health to full. The clips land later
-// from the Blender retarget batch (KayKit Lie_Idle -> 'Sleeping'); until
-// then a black fade stands in for the sleep (no error toast).
-// State machine: 'awake' -> E near bed -> 'lying' (Lie_Down one-shot,
-// or the fade) -> 'asleep' ('Sleeping' loop, or black screen) -> E ->
-// 'waking' (Lie_StandUp one-shot) -> 'awake'. The health restore applies
+// each other). Sleeping restores health to full. The 19:00 Blender
+// batch delivered only the 'Sleeping' loop (KayKit Lie_Idle, 2.67s) —
+// there are NO Lie_Down / Lie_StandUp clips, so both transitions are
+// short black fades that mask the pose snap (fade in, switch pose
+// behind the black, fade out). State machine: 'awake' -> E near bed ->
+// 'lying' (fade, ~1.1s) -> 'asleep' ('Sleeping' loop, persistent until
+// E) -> 'waking' (fade, ~1.1s) -> 'awake'. The health restore applies
 // on waking up, so a cancelled sleep restores nothing. Movement + J/K/L
 // lock in every state except 'awake'; the transitions ignore E so a
-// double-tap can't desync the state. Sleeping works without Bryce (fade
-// path), like eating.
+// double-tap can't desync the state. Without Bryce (or with the old
+// 12-clip .glb), the fade fallback still runs: one ~3.7s black sleep
+// that wakes on its own (E is ignored during it).
 let bed = null; // { group, pos, sleepPos, sleepYaw }
 let sleepState = 'awake';
+let sleepClipPath = false; // true when the current sleep uses the Sleeping clip (persistent, wakeable by E); false for the fade fallback (auto-wakes)
 const SLEEP_RANGE = 2.5;
 const SLEEP_FADE_MS = 1000;  // must match the #sleep-fade CSS transition
 const SLEEP_BLACK_MS = 1500; // how long the screen stays black (no-clip fallback)
+// The Sleeping clip holds the hips at rest height (0.967m above the
+// origin, FK-measured from bryce_animated.glb v2) with the body lying
+// flat, so the body's underside is ~0.85m above the origin. The
+// mattress top is 0.46m: the origin must sit 0.38m BELOW the bed's
+// ground level for the back to rest on the mattress (verify by
+// playtest). updateWalk aims charPos.y at this height while asleep
+// instead of the ground.
+const SLEEP_Y_OFFSET = -0.38;
 
 function createBed() {
   if (bed) { scene.remove(bed.group); bed = null; }
@@ -3263,17 +3314,32 @@ function createBed() {
   box(0.5, 0.1, 0.7, sheet, -0.75, 0.51, 0);
   // blanket over the foot two-thirds
   box(1.25, 0.06, 1.12, blanket, 0.4, 0.49, 0);
+  // canopy: 4 wooden posts + a slanted canvas roof (same recipe as the
+  // food stall's, smaller) — the bed sat exposed on the pavement
+  // (test 11⑤). Posts stand just outside the frame, inside the
+  // collision box, so the player can't walk through them.
+  const canvas = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.9 });
+  for (const dx of [-1.15, 1.15]) for (const dz of [-0.7, 0.7]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.3, 8), wood);
+    post.position.set(dx, 1.15, dz);
+    g.add(post);
+  }
+  const roof = box(2.7, 0.06, 1.8, canvas, 0, 2.25, 0);
+  roof.rotation.z = 0.06; // slight tilt along the bed's long axis, so rain would run off
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   g.position.set(bx, by, bz);
   scene.add(g);
-  // sleep spot: feet at the foot (east) end, facing the spawn. The
-  // Lie_Down clip lies the body back along the bed, head to the west.
-  // (Assumption — see patch.md: tune sleepYaw / the +0.85 offset after
-  // the 19:00 Blender preview if the body lands across the bed.)
+  // sleep spot: the Sleeping loop has no root motion — the hips stay at
+  // the origin, the head lies 0.53m behind the facing direction and the
+  // feet 0.5-0.68m ahead (FK-measured from bryce_animated.glb v2). The
+  // sleeper faces east (+X, toward the spawn), so the head lands west
+  // (toward the headboard): origin at bx - 0.22 puts the head on the
+  // pillow (centre -0.75) and the feet inside the bed (+0.46). The old
+  // +0.85 assumed a root-motion Lie_Down that never shipped.
   bed = {
     group: g,
     pos: new THREE.Vector3(bx, by, bz),
-    sleepPos: new THREE.Vector3(bx + 0.85, by, bz),
+    sleepPos: new THREE.Vector3(bx - 0.22, by, bz),
     sleepYaw: Math.PI / 2 // facing +X (east, toward the spawn)
   };
 }
@@ -3348,6 +3414,7 @@ function trySleep() {
     sleepState = 'lying';
     // snap to the sleep spot (v1: no walk-up animation), like toggleSit
     charPos.copy(bed.sleepPos);
+    charPos.y += SLEEP_Y_OFFSET; // the clip lies the body ~0.85m above the origin; sink it onto the mattress
     charYaw = bed.sleepYaw;
     charGroup.position.copy(charPos);
     charGroup.rotation.y = charYaw;
@@ -3355,29 +3422,39 @@ function trySleep() {
       bryce.group.position.copy(charPos);
       bryce.group.rotation.y = charYaw;
     }
-    // all-or-nothing: a partial clip set (e.g. Sleeping without
-    // Lie_Down) would strand the state machine, so it falls back too
-    if (bryce && bryce.clips['Lie_Down'] && bryce.clips['Sleeping'] && bryce.clips['Lie_StandUp']) {
-      if (!playOneShot('Lie_Down', () => {
+    // No Lie_Down / Lie_StandUp clips exist (the 19:00 batch shipped
+    // only the Sleeping loop), so the transitions are fades: fade to
+    // black, switch to the lying loop behind the black, fade back in.
+    // The sleep is persistent — it lasts until the player wakes (E).
+    if (bryce && bryce.clips['Sleeping']) {
+      sleepClipPath = true;
+      sleepFadeEl.style.opacity = '1';
+      sleepFadeTimers.push(setTimeout(() => {
         if (sleepState !== 'lying') return; // cancelled (mode switch / reset)
         sleepState = 'asleep';
         playLoco('Sleeping');
-      })) sleepState = 'awake';
+        sleepFadeEl.style.opacity = '0';
+      }, SLEEP_FADE_MS + 100));
     } else {
       // clips not loaded yet (or no Bryce at all): the fade stands in
-      if (bryce) console.warn('Sleep clips not loaded yet — using fade fallback');
+      sleepClipPath = false;
+      if (bryce) console.warn('Sleeping clip not loaded yet — using fade fallback');
       sleepFadeFallback();
     }
   } else if (sleepState === 'asleep') {
     if (bryce && bryce.oneShot) return;
-    if (bryce && bryce.clips['Lie_StandUp'] && bryce.clips['Sleeping']) {
+    if (sleepClipPath) {
+      // fade masks the snap back to standing, then restore health
       sleepState = 'waking';
-      if (!playOneShot('Lie_StandUp', () => {
+      sleepFadeEl.style.opacity = '1';
+      sleepFadeTimers.push(setTimeout(() => {
         if (sleepState !== 'waking') return; // cancelled
         sleepState = 'awake';
+        sleepClipPath = false;
         playLoco('Idle');
+        sleepFadeEl.style.opacity = '0';
         restoreHealthFull();
-      })) sleepState = 'asleep';
+      }, SLEEP_FADE_MS + 100));
     }
     // fade path: the sequence finishes on its own in ~3.7s; E during
     // the black screen is ignored
@@ -3393,6 +3470,7 @@ function cancelSleep() {
   // cleared and the overlay is forced transparent.
   if (sleepState === 'awake') return;
   sleepState = 'awake';
+  sleepClipPath = false;
   clearSleepFadeTimers();
   sleepFadeEl.style.opacity = '0';
 }
@@ -3402,7 +3480,9 @@ let lastSleepPrompt = null;
 function updateSleepPrompt() {
   let text = '';
   if (bed && mode === 'walk') {
-    if (sleepState === 'asleep' || sleepState === 'lying') text = '按 E 起床';
+    // only the steady clip-path sleep offers waking: the 'lying' /
+    // 'waking' fades ignore E, and the no-clip fallback wakes itself
+    if (sleepState === 'asleep' && sleepClipPath) text = '按 E 起床';
     else if (sleepState === 'awake' && !flying && sitState === 'stand' && carState === 'none') {
       const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
       if (d <= SLEEP_RANGE) text = '按 E 睡覺';
@@ -3549,11 +3629,21 @@ const BIKE_ACCEL = 10, BIKE_BRAKE = 24, BIKE_DRAG = 0.9;
 const BIKE_MAX_SPEED = 24, BIKE_MAX_FAST = 38, BIKE_MAX_REVERSE = 5; // quicker + faster than the car (15/25 -> 19.5/32.5); tune by playtest
 const BIKE_LEAN_MAX = 0.3; // max roll into a turn (radians)
 const BIKE_MOUNT_LOCAL = new THREE.Vector3(0.8, 0, 0); // left side, like mounting a real bike
-// Feet at footpeg height (0.35m): the Sitting Idle fallback puts the
-// hips ~0.45m above the feet, so 0.35 + 0.45 = 0.80m = the seat top.
-// Re-verify against the real Riding clip at the 19:00 retarget: if
-// its hips sit at H above the clip's feet, this offset becomes (0.8 - H).
-const BIKE_SEAT_LOCAL = new THREE.Vector3(0, 0.35, -0.1);
+// Seat height: the Riding clip's hips sit 0.113m above the character
+// origin (measured from bryce_animated.glb v2, 2026-11-23), so the
+// origin rides at 0.80 - 0.113 = 0.69m to put the hips on the seat
+// (seat box top is 0.85m; 0.80 is the old Sitting Idle calibration, a
+// slight sink that reads as weight on the seat). The Sitting Idle
+// fallback (hips 0.534m) keeps its playtest-verified 0.35 offset —
+// updateRide picks per clip, so a cached old .glb doesn't float the
+// rider 0.37m above the seat.
+// Known mismatch (playtest): the Riding clip's feet dangle 0.58m BELOW
+// the origin (0.11m above the ground when seated) and its hands reach
+// 0.28m forward at 0.69m above the origin — about 0.38m above and
+// 0.37m behind the procedural handlebar. The bars/pegs belong to the
+// bike model, not the seat offset; revisit when the EH98 bike lands.
+const BIKE_SEAT_LOCAL = new THREE.Vector3(0, 0.69, -0.1);
+const BIKE_SEAT_LOCAL_FALLBACK = new THREE.Vector3(0, 0.35, -0.1); // Sitting Idle (old 12-clip .glb)
 
 function bikeLocalToWorld(local) {
   // rotate a bike-local offset by the bike's yaw, add the bike position
@@ -3648,6 +3738,7 @@ function tryBike() {
     bryce.group.position.copy(charPos);
     bryce.group.rotation.y = charYaw;
     bryce.group.rotation.z = 0;
+    _prevPos.copy(charPos); // so the speedometer doesn't spike on the mount snap (same as the car enter fix)
     bikeState = 'riding';
     playLoco(bryce.clips['Riding'] ? 'Riding' : 'Sitting Idle');
   } else if (bikeState === 'riding') {
@@ -3673,6 +3764,7 @@ function exitBikeToGround() {
   bryce.group.position.copy(charPos);
   bryce.group.rotation.y = charYaw;
   bryce.group.rotation.z = 0;
+  _prevPos.copy(charPos); // so the speedometer doesn't spike on the dismount snap (same as the car exit fix)
   bike.lean = 0;
   bike.group.rotation.z = 0;
   bikeState = 'none';
@@ -3782,7 +3874,10 @@ function updateRide(dt) {
   charGroup.position.copy(charPos);
   charGroup.rotation.y = charYaw;
   if (bryce) {
-    bryce.group.position.copy(bikeLocalToWorld(BIKE_SEAT_LOCAL));
+    // seat offset matches the clip: Riding hips are 0.113m above the
+    // origin, Sitting Idle hips 0.534m — one offset can't serve both
+    const seatLocal = bryce.clips['Riding'] ? BIKE_SEAT_LOCAL : BIKE_SEAT_LOCAL_FALLBACK;
+    bryce.group.position.copy(bikeLocalToWorld(seatLocal));
     bryce.group.rotation.set(0, bike.yaw, bike.lean);
     playLoco(bryce.clips['Riding'] ? 'Riding' : 'Sitting Idle');
   }
@@ -3842,10 +3937,12 @@ function updateContextButton() {
   if (mode === 'walk' && !inRoom) {
     // exits first (same order as tryInteract / toggleVehicle) — only
     // steady states offer an exit: during a 1s transition ('sitting' /
-    // 'standing' / 'entering' / 'exiting' / 'mounting') the handlers
-    // silently ignore input, so showing the button then is a lie that
-    // makes the user hammer a dead button (test 10)
-    if (sleepState !== 'awake') action = 'wake';
+    // 'standing' / 'entering' / 'exiting' / 'mounting' / 'lying' /
+    // 'waking') the handlers silently ignore input, so showing the
+    // button then is a lie that makes the user hammer a dead button
+    // (test 10). The no-clip sleep fallback also offers no exit — it
+    // wakes on its own in ~3.7s.
+    if (sleepState === 'asleep' && sleepClipPath) action = 'wake';
     else if (sitState === 'seated') action = 'stand';
     else if (carState === 'driving') action = 'exit-car';
     else if (bikeState === 'riding') action = 'exit-bike';
@@ -4026,7 +4123,7 @@ function createRoom() {
   box(0.08, 1.56, 0.06, wood, 1.24, 1.8, -3.97);
   box(0.05, 1.4, 0.04, wood, 0, 1.8, -3.96);
   box(2.4, 0.05, 0.04, wood, 0, 1.8, -3.96);
-  // bed (visual only — the Sleeping clip + sleep trigger are separate future work)
+  // bed (visual only — no sleep trigger in the room; sleeping uses the plaza bed)
   box(1.2, 0.3, 2.2, wood, -3.6, 0.15, -2.6);
   box(1.1, 0.18, 2.1, white, -3.6, 0.39, -2.6);
   box(0.9, 0.12, 0.5, paleBlue, -3.6, 0.52, -3.4);
@@ -4234,6 +4331,11 @@ function updateWalk(dt) {
     if (charPos.y <= gy) { charPos.y = gy; if (vy <= 0) flying = false; }
   } else {
     gy = groundHeight(charPos.x, charPos.z, charPos.y);
+    // asleep: the Sleeping clip lies the body ~0.85m above the origin,
+    // so the origin rides below the bed's ground level (SLEEP_Y_OFFSET)
+    // to land the body on the mattress — the ground lerp would sink
+    // the sleeper into the bed frame otherwise
+    if (sleepState !== 'awake' && bed) gy = bed.pos.y + SLEEP_Y_OFFSET;
     const rate = gy < charPos.y ? 12 : 6;
     charPos.y += (gy - charPos.y) * Math.min(1, dt * rate);
   }
@@ -4340,8 +4442,8 @@ function animate() {
     const fps = Math.round(frames / fpsTime);
     frames = 0; fpsTime = 0;
     statsEl.textContent = model
-      ? 'FPS ' + fps + ' · 三角面 ' + renderer.info.render.triangles.toLocaleString() + '\n顯示卡：' + gpuName
-      : '顯示卡：' + gpuName;
+      ? 'FPS ' + fps + ' · 三角面 ' + renderer.info.render.triangles.toLocaleString() + '\n顯示卡：' + gpuName + '\n版本 ' + BUILD_VERSION
+      : '顯示卡：' + gpuName + '\n版本 ' + BUILD_VERSION;
   }
 }
 animate();
