@@ -1597,7 +1597,12 @@ const CAR_RANGE = 3;
 const CAR_ACCEL = 8, CAR_BRAKE = 20, CAR_DRAG = 1.2;
 const CAR_MAX_SPEED = 15, CAR_MAX_FAST = 25, CAR_MAX_REVERSE = 5;
 const CAR_DOOR_LOCAL = new THREE.Vector3(-1.15, 0, 0.4);
-const CAR_SEAT_LOCAL = new THREE.Vector3(-0.45, 0.15, 0.3); // seat low: seated head ~1.40, roof underside 1.47
+// Entering Car's root motion carries the character +1.76m forward (measured
+// headlessly, 2026-11-23), so the enter starts 1.76m BEHIND the door: the
+// clip then walks him exactly to the door instead of past the front bumper.
+// Range check still uses the door; only the snap point is offset.
+const CAR_ENTER_START_LOCAL = new THREE.Vector3(-1.15, 0, -1.36);
+const CAR_SEAT_LOCAL = new THREE.Vector3(-0.45, 0, 0.3); // seat at ground: measured seated headtop 1.420, roof underside 1.47 (5cm margin)
 
 function carLocalToWorld(local) {
   // rotate a car-local offset by the car's yaw, add the car position
@@ -1618,7 +1623,7 @@ function createCar() {
   const cy = groundHeight(sx, sz, 50);
   const g = new THREE.Group();
   const paint = new THREE.MeshStandardMaterial({ color: 0x2a3542, roughness: 0.35, metalness: 0.6 });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x0e151c, roughness: 0.1, metalness: 0.8, transparent: true, opacity: 0.45, depthWrite: false });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x3a4a55, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.25, depthWrite: false });
   const tyre = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
   const light = new THREE.MeshStandardMaterial({ color: 0xfff6c9, roughness: 0.3, emissive: 0x555533 });
   const box = (w, h, d, m, x, y, z) => {
@@ -1637,10 +1642,10 @@ function createCar() {
   box(1.74, 0.45, 2.0, glass, 0, 1.25, -0.2);   // window band (transparent)
   box(0.35, 0.18, 0.06, light, -0.6, 0.7, 2.26); // headlights
   box(0.35, 0.18, 0.06, light, 0.6, 0.7, 2.26);
-  const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.25, 16);
-  const hubGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.27, 12);
+  const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 16);
+  const hubGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.32, 12);
   const hubMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.4, metalness: 0.7 });
-  for (const [wx, wz] of [[-0.85, 1.45], [0.85, 1.45], [-0.85, -1.45], [0.85, -1.45]]) {
+  for (const [wx, wz] of [[-0.95, 1.45], [0.95, 1.45], [-0.95, -1.45], [0.95, -1.45]]) {
     const w = new THREE.Mesh(wheelGeo, tyre);
     w.rotation.z = Math.PI / 2;
     w.position.set(wx, 0.35, wz);
@@ -1667,9 +1672,12 @@ function toggleCar() {
     if (d > CAR_RANGE) return;
     if (bryce.oneShot) return; // wait for a move (e.g. punch) to finish
     if (!bryce.clips['Entering Car'] || !bryce.clips['Driving']) return;
-    // snap to the door (v1: no walk-up animation)
+    // snap to the enter-start point, 1.76m behind the door (v1: no walk-up
+    // animation) — the Entering Car clip's own root motion walks him forward
+    // to the door from there
     carState = 'entering';
-    charPos.set(door.x, groundHeight(door.x, door.z, car.pos.y), door.z);
+    const start = carLocalToWorld(CAR_ENTER_START_LOCAL);
+    charPos.set(start.x, groundHeight(start.x, start.z, car.pos.y), start.z);
     charYaw = car.yaw;
     charGroup.position.copy(charPos);
     charGroup.rotation.y = charYaw;
