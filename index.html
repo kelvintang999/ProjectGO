@@ -329,6 +329,8 @@
     <p class="menu-section">畫面</p>
     <button id="set-shadow" class="qc-btn set-row">光影<span class="set-val">開</span></button>
     <button id="set-night" class="qc-btn set-row">夜間<span class="set-val">關</span></button>
+    <button id="set-autolight" class="qc-btn set-row">自動光照<span class="set-val">開</span></button>
+    <p id="sun-times" class="set-soon">日出日落讀取中…</p>
     <button id="set-nav" class="qc-btn set-row">導航模式<span class="set-val">開</span></button>
     <button id="set-reset" class="qc-btn">重置視角</button>
     <button id="set-pick" class="qc-btn">選擇 .glb 檔案</button>
@@ -378,7 +380,7 @@ const dropHint = document.getElementById('drop-hint');
 
 // Build label (test 11⑩: nothing on the page showed the version).
 // Shown on the main menu + the HUD stats line; bump on every push.
-const BUILD_VERSION = '2026-11-23-3';
+const BUILD_VERSION = '2026-11-23-4';
 document.getElementById('version-menu').textContent = '版本 ' + BUILD_VERSION;
 
 // ---------- renderer / scene ----------
@@ -418,6 +420,25 @@ sun.shadow.mapSize.set(1024, 1024);
 sun.shadow.bias = -0.0005;
 scene.add(sun);
 scene.add(sun.target);
+
+// ---------- real-time sun (SunriseSunset API) ----------
+// Tsim Sha Tsui: lat 22.297, lng 114.169. The API is free, no key:
+// sunrise/sunset for today, then the sun's elevation is interpolated
+// as a sine curve between them (good enough for a lighting mood, not
+// navigation). If the fetch fails, the fixed day preset stays.
+// (uyu 2026-11-23: connect it — lighting time use)
+const SUN_API_URL = 'https://api.sunrise-sunset.org/json?lat=22.297&lng=114.169&formatted=0';
+const SUN_LAT = 22.297;
+// mutable sun direction (updateShadowFocus aims the shadow camera
+// along it); fallback is a late-morning sun.
+let sunDir = new THREE.Vector3(0.8, 1.1, 0.5).normalize();
+let lightingAuto = true; // follow real time; a manual night toggle turns this off
+let sunTimes = null; // { sunrise: Date, sunset: Date, maxElevDeg }
+// plaza street lamps (created in createLamps, after the map loads)
+let lampLights = [];
+let lampHeads = [];
+const lampHeadLitMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
+const lampHeadDimMat = new THREE.MeshBasicMaterial({ color: 0x6a6f75 });
 
 // ---------- loader ----------
 const draco = new DRACOLoader();
@@ -483,12 +504,11 @@ function frameModel() {
   barWrap.style.display = 'none';
 }
 
-const SUN_DIR = new THREE.Vector3(0.8, 1.1, 0.5).normalize();
 function updateShadowFocus() {
   if (!model) return;
   const focus = mode === 'walk' ? charPos : controls.target;
   const half = mode === 'walk' ? 120 : 400;
-  sun.position.copy(focus).addScaledVector(SUN_DIR, 500);
+  sun.position.copy(focus).addScaledVector(sunDir, 500);
   sun.target.position.copy(focus);
   sun.target.updateMatrixWorld();
   const sc = sun.shadow.camera;
@@ -1376,30 +1396,111 @@ function setNavMode(on) {
   navMode = on;
 }
 
-// day / night lighting presets (textures are daytime photos, so night is a
-// dimmed mood, not true night photography)
-function setNightMode(on) {
-  nightMode = on;
-  if (on) {
-    scene.background.set(0x0a0e1a);
-    scene.fog.color.set(0x0a0e1a);
-    hemi.intensity = 0.15;
-    hemi.color.set(0x334466);
-    sun.intensity = 0.25;
-    sun.color.set(0x8fb4ff);
-    if (fogWallMat) fogWallMat.color.set(0x5a6b80);
-  } else {
-    scene.background.set(0x87b5d6);
-    if (scene.fog) scene.fog.color.set(0x87b5d6);
-    hemi.intensity = 0.9;
-    hemi.color.set(0xbfd9ff);
-    sun.intensity = 2.0;
-    sun.color.set(0xfff2dd);
-    if (fogWallMat) fogWallMat.color.set(0xffffff);
-  }
+// day / night lighting: one lerpable preset pair (textures are daytime
+// photos, so night is a dimmed mood, not true night photography).
+// dayness 1 = full day, 0 = full night; dusk/dawn sit in between.
+const DAY_PRESET = {
+  bg: new THREE.Color(0x87b5d6), fog: new THREE.Color(0x87b5d6),
+  hemiSky: new THREE.Color(0xbfd9ff), hemiGround: new THREE.Color(0x8a7a5a),
+  hemi: 0.9, sunColor: new THREE.Color(0xfff2dd), sun: 2.0,
+  fogWall: new THREE.Color(0xffffff), winGlow: 0.15, exposure: 1.0,
+};
+const NIGHT_PRESET = {
+  bg: new THREE.Color(0x0a0e1a), fog: new THREE.Color(0x0a0e1a),
+  hemiSky: new THREE.Color(0x334466), hemiGround: new THREE.Color(0x2a2620),
+  hemi: 0.45, sunColor: new THREE.Color(0x9db8ff), sun: 0.5,
+  fogWall: new THREE.Color(0x5a6b80), winGlow: 1.4, exposure: 1.15,
+};
+// night is no longer near-black (test 11② / uyu 2026-11-23): hemi
+// 0.15 -> 0.45, moonlight 0.25 -> 0.5, exposure 1.0 -> 1.15, plus the
+// plaza street lamps below. There is still no separate ambient light
+// object: hemi is the ambient.
+function applyLighting(dayness) {
+  const n = 1 - dayness; // night factor
+  nightMode = dayness < 0.5;
+  scene.background.lerpColors(DAY_PRESET.bg, NIGHT_PRESET.bg, n);
+  if (scene.fog) scene.fog.color.lerpColors(DAY_PRESET.fog, NIGHT_PRESET.fog, n);
+  hemi.intensity = DAY_PRESET.hemi + (NIGHT_PRESET.hemi - DAY_PRESET.hemi) * n;
+  hemi.color.lerpColors(DAY_PRESET.hemiSky, NIGHT_PRESET.hemiSky, n);
+  hemi.groundColor.lerpColors(DAY_PRESET.hemiGround, NIGHT_PRESET.hemiGround, n);
+  sun.intensity = DAY_PRESET.sun + (NIGHT_PRESET.sun - DAY_PRESET.sun) * n;
+  sun.color.lerpColors(DAY_PRESET.sunColor, NIGHT_PRESET.sunColor, n);
+  if (fogWallMat) fogWallMat.color.lerpColors(DAY_PRESET.fogWall, NIGHT_PRESET.fogWall, n);
+  renderer.toneMappingExposure = DAY_PRESET.exposure + (NIGHT_PRESET.exposure - DAY_PRESET.exposure) * n;
   // procedural outer city: lit windows glow at night
-  for (const m of outerCityWinMats) m.emissiveIntensity = on ? 1.4 : 0.15;
+  for (const m of outerCityWinMats) m.emissiveIntensity = DAY_PRESET.winGlow + (NIGHT_PRESET.winGlow - DAY_PRESET.winGlow) * n;
+  // plaza street lamps: on at night, off by day
+  for (const l of lampLights) l.intensity = n > 0.5 ? 30 : 0;
+  for (const h of lampHeads) h.material = n > 0.5 ? lampHeadLitMat : lampHeadDimMat;
 }
+
+// Manual toggle: switches off auto lighting (the user asked for this
+// state explicitly); the auto toggle in settings turns it back on.
+function setNightMode(on, manual = true) {
+  if (manual) lightingAuto = false;
+  applyLighting(on ? 0 : 1);
+}
+
+// solar elevation from the API's sunrise/sunset: sine curve between
+// them, peaking at maxElev (from declination). Azimuth: 90° (E) at
+// sunrise -> 180° (S) at noon -> 270° (W) at sunset.
+function solarState(now) {
+  if (!sunTimes) return null;
+  const { sunrise, sunset, maxElevDeg } = sunTimes;
+  if (now <= sunrise || now >= sunset) return { elevDeg: -6, azDeg: 270, dayness: 0 };
+  const f = (now - sunrise) / (sunset - sunrise); // 0..1 across the day
+  const elevDeg = Math.sin(Math.PI * f) * maxElevDeg;
+  const azDeg = 90 + 180 * f;
+  // dayness: full day above 15°, full night below -3° (civil dusk)
+  const dayness = THREE.MathUtils.clamp((elevDeg + 3) / 18, 0, 1);
+  return { elevDeg, azDeg, dayness };
+}
+
+function applySolarLighting() {
+  if (!lightingAuto || !sunTimes) return;
+  const s = solarState(new Date());
+  if (!s) return;
+  const el = THREE.MathUtils.degToRad(s.elevDeg);
+  const az = THREE.MathUtils.degToRad(s.azDeg);
+  if (s.elevDeg > 0) {
+    // sun above the horizon: direction from elevation + azimuth
+    // (azimuth from north clockwise; scene +X = east, -Z = north)
+    sunDir.set(Math.cos(el) * Math.sin(az), Math.sin(el), -Math.cos(el) * Math.cos(az)).normalize();
+  } else {
+    // moon: fixed high south-east so night shadows still read
+    sunDir.set(0.5, 0.85, 0.35).normalize();
+  }
+  applyLighting(s.dayness);
+  // low sun warms up (dawn/dusk)
+  if (s.elevDeg > 0 && s.elevDeg < 10) sun.color.lerp(new THREE.Color(0xffb36b), (1 - s.elevDeg / 10) * 0.6);
+}
+
+function fetchSunTimes() {
+  fetch(SUN_API_URL).then((r) => r.json()).then((j) => {
+    if (j.status !== 'OK' || !j.results) throw new Error('sun api ' + j.status);
+    const sunrise = new Date(j.results.sunrise);
+    const sunset = new Date(j.results.sunset);
+    // max solar elevation today: 90 - |lat - declination|;
+    // declination ≈ -23.44 * cos(2π (N+10) / 365), N = day of year
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    const N = Math.floor((now - start) / 86400000);
+    const decl = -23.44 * Math.cos(2 * Math.PI * (N + 10) / 365);
+    const maxElevDeg = 90 - Math.abs(SUN_LAT - decl);
+    sunTimes = { sunrise, sunset, maxElevDeg };
+    const fmt = (d) => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    const el = document.getElementById('sun-times');
+    if (el) el.textContent = '今日日出 ' + fmt(sunrise) + ' · 日落 ' + fmt(sunset) + '（尖沙咀）';
+    applySolarLighting();
+  }).catch((e) => {
+    console.warn('SunriseSunset 讀不到，沿用預設日間光照', e);
+    const el = document.getElementById('sun-times');
+    if (el) el.textContent = '日出日落讀取失敗，沿用預設光照';
+  });
+}
+fetchSunTimes();
+// re-apply every 5 min so a long session crosses sunset/sunrise
+setInterval(() => { if (lightingAuto) applySolarLighting(); }, 5 * 60 * 1000);
 document.getElementById('punchBtn').addEventListener('click', () => startAction('punch'));
 document.getElementById('kickBtn').addEventListener('click', () => startAction('kick'));
 document.getElementById('comboBtn').addEventListener('click', () => startAction('combo'));
@@ -1555,6 +1656,7 @@ function onLoaded(gltf, name) {
   createFerry();
   spawnCharacter();
   createBench();
+  createLamps();
   createCar();
   createBike();
   createStall();
@@ -1934,6 +2036,7 @@ let settingsOpen = false;
 function syncSettingsUI() {
   document.querySelector('#set-shadow .set-val').textContent = shadowsOn ? '開' : '關';
   document.querySelector('#set-night .set-val').textContent = nightMode ? '開' : '關';
+  document.querySelector('#set-autolight .set-val').textContent = lightingAuto ? '開' : '關';
   document.querySelector('#set-nav .set-val').textContent = navMode ? '開' : '關';
   syncRoomButton();
   syncDressUpUI();
@@ -1954,6 +2057,7 @@ document.getElementById('pause-settings').addEventListener('click', () => openSe
 document.getElementById('settings-back').addEventListener('click', closeSettings);
 document.getElementById('set-shadow').addEventListener('click', () => { setShadows(!shadowsOn); syncSettingsUI(); });
 document.getElementById('set-night').addEventListener('click', () => { setNightMode(!nightMode); syncSettingsUI(); });
+document.getElementById('set-autolight').addEventListener('click', () => { lightingAuto = !lightingAuto; if (lightingAuto) applySolarLighting(); syncSettingsUI(); });
 document.getElementById('set-nav').addEventListener('click', () => { setNavMode(!navMode); syncSettingsUI(); });
 document.getElementById('set-reset').addEventListener('click', resetView);
 document.getElementById('set-pick').addEventListener('click', () => fileInput.click());
@@ -2795,6 +2899,55 @@ function createBench() {
     sitPos: new THREE.Vector3(bx, by, bz + 0.35),
     yaw: 0
   };
+}
+
+// ---------- plaza street lamps (night light sources) ----------
+// 4 lit lamps around the spawn plaza + 2 glow-only heads toward the
+// pier. Poles are always visible; the PointLights + glowing heads
+// switch on with the night preset in applyLighting(). Only 4 real
+// lights (distance-limited) to keep mobile fill cost down.
+// (uyu 2026-11-23: night mode is fully black — add light sources)
+let lampGroup = null;
+function createLamps() {
+  if (lampGroup) { scene.remove(lampGroup); lampGroup = null; }
+  lampLights = [];
+  lampHeads = [];
+  if (!model) return;
+  const sx = SPAWN_RAW.x - modelCenter.x;
+  const sz = SPAWN_RAW.z - modelCenter.z;
+  const g = new THREE.Group();
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.5, metalness: 0.6 });
+  const poleGeo = new THREE.CylinderGeometry(0.06, 0.09, 4.2, 10);
+  const headGeo = new THREE.SphereGeometry(0.2, 12, 10);
+  // (dx, dz from spawn, lit?) — plaza corners lit; pier pair glow-only
+  const spots = [
+    [-14, -8, true], [14, -8, true], [-14, 12, true], [14, 12, true],
+    [-6, 26, false], [6, 26, false],
+  ];
+  for (const [dx, dz, lit] of spots) {
+    const x = sx + dx, z = sz + dz;
+    const y = groundHeight(x, z, 50);
+    const pole = new THREE.Mesh(poleGeo, poleMat);
+    pole.position.set(x, y + 2.1, z);
+    pole.castShadow = true;
+    g.add(pole);
+    const head = new THREE.Mesh(headGeo, lampHeadDimMat);
+    head.position.set(x, y + 4.35, z);
+    g.add(head);
+    lampHeads.push(head);
+    if (lit) {
+      const pt = new THREE.PointLight(0xffc98a, 0, 22, 1.8);
+      pt.position.set(x, y + 4.2, z);
+      g.add(pt);
+      lampLights.push(pt);
+    }
+  }
+  scene.add(g);
+  lampGroup = g;
+  // lamps must match the current light state right away (the solar
+  // fetch may already have applied night before the map finished)
+  if (lightingAuto && sunTimes) applySolarLighting();
+  else applyLighting(nightMode ? 0 : 1);
 }
 
 // Bench collision: keep the walker out of the bench's footprint.
