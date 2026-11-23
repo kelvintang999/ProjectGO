@@ -1319,12 +1319,14 @@ function onLoaded(gltf, name) {
   roadGrid = null; footGrid = null;
   loadRoadData();
   setMode(mode); // apply the current mode to the fresh model
-  // Mobile: Bryce loads only after the map is done, so the two big
-  // .glb parses don't spike memory at the same time (iOS kills the tab).
+  // Bryce loads only after the map is done, on all devices: on mobile
+  // the two big .glb parses must not spike memory at the same time
+  // (iOS kills the tab), and on desktop the 59MB download should not
+  // start before the user has even picked a quality.
   // NOTE: check `bryce` itself, not `bryce.group` — bryce is still null
-  // here on mobile (that's the whole point of deferring), and reading
+  // here (that's the whole point of deferring), and reading
   // .group off null throws "null is not an object" on iPhone Safari.
-  if (isMobile && !bryce) loadBryce();
+  if (!bryce) loadBryce();
 }
 
 function onError(err) {
@@ -1403,9 +1405,8 @@ if (modelParam) {
   });
 }
 
-// rigged character: desktop loads it in parallel with the map; mobile
-// waits until the map is done (see onLoaded) to avoid a memory spike.
-if (!isMobile) loadBryce();
+// rigged character: loaded in onLoaded, after the map is done
+// (see there) — never before the user picks a quality.
 
 // ---------- file picker + drag & drop ----------
 document.getElementById('pick').addEventListener('click', () => fileInput.click());
