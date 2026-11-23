@@ -229,12 +229,8 @@
     <button id="comboBtn" class="secondary">連招 (L)</button>
     <button id="drinkBtn" class="secondary">喝水 (T)</button>
   </div>
-  <div class="row hud-group">
-    <button id="eatBtn" class="secondary">吃飯 (E)</button>
-    <button id="sitBtn" class="secondary">坐下 (E)</button>
-    <button id="sleepBtn" class="secondary">睡覺 (E)</button>
-    <button id="carBtn" class="secondary">上車 (F)</button>
-    <button id="bikeBtn" class="secondary">騎車 (F)</button>
+  <div id="interact-row" class="row hud-group" style="display:none">
+    <button id="interactBtn" class="secondary">互動</button>
   </div>
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
@@ -1402,11 +1398,6 @@ document.getElementById('punchBtn').addEventListener('click', () => startAction(
 document.getElementById('kickBtn').addEventListener('click', () => startAction('kick'));
 document.getElementById('comboBtn').addEventListener('click', () => startAction('combo'));
 document.getElementById('drinkBtn').addEventListener('click', () => drinkWater());
-document.getElementById('eatBtn').addEventListener('click', () => eatFood());
-document.getElementById('sitBtn').addEventListener('click', () => toggleSit());
-document.getElementById('sleepBtn').addEventListener('click', () => trySleep());
-document.getElementById('carBtn').addEventListener('click', () => toggleCar());
-document.getElementById('bikeBtn').addEventListener('click', () => tryBike());
 
 function spawnCharacter() {
   // resetting the view from inside the room: leave the room state
@@ -2817,7 +2808,6 @@ function cancelSit() {
 }
 
 const sitPromptEl = document.getElementById('sit-prompt');
-const sitBtnEl = document.getElementById('sitBtn');
 let lastSitPrompt = null;
 function updateSitPrompt() {
   let text = '';
@@ -2832,7 +2822,6 @@ function updateSitPrompt() {
     lastSitPrompt = text;
     sitPromptEl.textContent = text;
     sitPromptEl.style.display = text ? 'block' : 'none';
-    sitBtnEl.textContent = (sitState === 'seated' || sitState === 'sitting') ? '站起來 (E)' : '坐下 (E)';
   }
 }
 
@@ -2987,7 +2976,6 @@ function cancelCar() {
 }
 
 const carPromptEl = document.getElementById('car-prompt');
-const carBtnEl = document.getElementById('carBtn');
 let lastCarPrompt = null;
 function updateCarPrompt() {
   let text = '';
@@ -3002,7 +2990,6 @@ function updateCarPrompt() {
     lastCarPrompt = text;
     carPromptEl.textContent = text;
     carPromptEl.style.display = text ? 'block' : 'none';
-    carBtnEl.textContent = (carState === 'driving' || carState === 'entering') ? '下車 (F)' : '上車 (F)';
   }
 }
 
@@ -3389,7 +3376,6 @@ function cancelSleep() {
 }
 
 const sleepPromptEl = document.getElementById('sleep-prompt');
-const sleepBtnEl = document.getElementById('sleepBtn');
 let lastSleepPrompt = null;
 function updateSleepPrompt() {
   let text = '';
@@ -3404,7 +3390,6 @@ function updateSleepPrompt() {
     lastSleepPrompt = text;
     sleepPromptEl.textContent = text;
     sleepPromptEl.style.display = text ? 'block' : 'none';
-    sleepBtnEl.textContent = (sleepState === 'asleep' || sleepState === 'lying') ? '起床 (E)' : '睡覺 (E)';
   }
 }
 
@@ -3682,7 +3667,6 @@ function cancelBike() {
 }
 
 const bikePromptEl = document.getElementById('bike-prompt');
-const bikeBtnEl = document.getElementById('bikeBtn');
 let lastBikePrompt = null;
 function updateBikePrompt() {
   let text = '';
@@ -3697,7 +3681,6 @@ function updateBikePrompt() {
     lastBikePrompt = text;
     bikePromptEl.textContent = text;
     bikePromptEl.style.display = text ? 'block' : 'none';
-    bikeBtnEl.textContent = (bikeState === 'riding' || bikeState === 'mounting') ? '下車 (F)' : '騎車 (F)';
   }
 }
 
@@ -3792,8 +3775,8 @@ function updateRide(dt) {
 // F is shared by the car and the bike: if already driving/riding, F
 // exits that vehicle; otherwise F enters whichever vehicle is nearer
 // (both in range -> the nearer one wins). The keydown handler calls
-// this instead of toggleCar; the car/bike buttons still call their
-// own toggles directly.
+// this instead of toggleCar; the contextual HUD button dispatches
+// through doContextAction instead (same exit-first, nearest-wins rule).
 function toggleVehicle() {
   if (carState === 'driving' || carState === 'entering' || carState === 'exiting') { toggleCar(); return; }
   if (bikeState === 'riding' || bikeState === 'mounting' || bikeState === 'dismounting') { tryBike(); return; }
@@ -3805,6 +3788,88 @@ function toggleVehicle() {
   else if (bikeD <= BIKE_RANGE) tryBike();
   // out of range of both: nothing (each toggle has its own range check)
 }
+
+// ---------- one contextual interaction button (2026-11-23) ----------
+// The five interaction buttons (eat / sit / sleep / car / bike) are
+// merged into one: it shows only the nearest available interaction —
+// or the exit action when already sitting / asleep / driving /
+// riding — and hides when nothing is in range. Priority mirrors the
+// E/F key dispatchers (tryInteract / toggleVehicle): exits first,
+// then nearest in range across all five (the ranges never overlap
+// in practice, but nearest-wins keeps it deterministic if they do).
+// The per-system prompt lines ("按 E 坐下" etc.) stay as keyboard
+// hints; this button is the touch/mouse equivalent.
+const interactRowEl = document.getElementById('interact-row');
+const interactBtnEl = document.getElementById('interactBtn');
+let ctxAction = null; // action the button currently offers (null = hidden)
+let lastCtxAction = undefined; // last action written to the DOM
+const CTX_LABELS = {
+  wake: '☀️ 起床 (E)',
+  stand: '🧍 站起來 (E)',
+  'exit-car': '🚶 下車 (F)',
+  'exit-bike': '🚶 下車 (F)',
+  sit: '🪑 坐下 (E)',
+  eat: '🍜 吃飯 (E)',
+  sleep: '🛏️ 睡覺 (E)',
+  car: '🚗 上車 (F)',
+  bike: '🏍️ 騎車 (F)'
+};
+function updateContextButton() {
+  let action = null;
+  if (mode === 'walk' && !inRoom) {
+    // exits first (same order as tryInteract / toggleVehicle)
+    if (sleepState !== 'awake') action = 'wake';
+    else if (sitState !== 'stand') action = 'stand';
+    else if (carState === 'driving' || carState === 'entering') action = 'exit-car';
+    else if (bikeState === 'riding' || bikeState === 'mounting') action = 'exit-bike';
+    else if (!flying) {
+      let bestD = Infinity;
+      if (bench && bryce) {
+        const d = Math.hypot(charPos.x - bench.pos.x, charPos.z - bench.pos.z);
+        if (d <= SIT_RANGE && d < bestD) { action = 'sit'; bestD = d; }
+      }
+      if (stall) {
+        const d = Math.hypot(charPos.x - stall.pos.x, charPos.z - stall.pos.z);
+        if (d <= EAT_RANGE && d < bestD) { action = 'eat'; bestD = d; }
+      }
+      if (bed) {
+        const d = Math.hypot(charPos.x - bed.pos.x, charPos.z - bed.pos.z);
+        if (d <= SLEEP_RANGE && d < bestD) { action = 'sleep'; bestD = d; }
+      }
+      if (car && bryce && carState === 'none') {
+        const d = Math.hypot(charPos.x - car.pos.x, charPos.z - car.pos.z);
+        if (d <= CAR_RANGE && d < bestD) { action = 'car'; bestD = d; }
+      }
+      if (bike && bryce && bikeState === 'none') {
+        const d = Math.hypot(charPos.x - bike.pos.x, charPos.z - bike.pos.z);
+        if (d <= BIKE_RANGE && d < bestD) { action = 'bike'; bestD = d; }
+      }
+    }
+  }
+  ctxAction = action;
+  if (action === lastCtxAction) return;
+  lastCtxAction = action;
+  if (!action) { interactRowEl.style.display = 'none'; return; }
+  interactRowEl.style.display = '';
+  interactBtnEl.textContent = CTX_LABELS[action];
+}
+
+function doContextAction() {
+  // dispatch on the action the button currently shows; every target
+  // re-checks its own range/guards, so a stale label is harmless
+  switch (ctxAction) {
+    case 'wake': trySleep(); break;
+    case 'stand': toggleSit(); break;
+    case 'exit-car': toggleCar(); break;
+    case 'exit-bike': tryBike(); break;
+    case 'sit': toggleSit(); break;
+    case 'eat': eatFood(); break;
+    case 'sleep': trySleep(); break;
+    case 'car': toggleCar(); break;
+    case 'bike': tryBike(); break;
+  }
+}
+interactBtnEl.addEventListener('click', doContextAction);
 
 // ---------- pier mid-section deck (fills the data gap in I35846) ----------
 // The government pier model covers the shore end and the tip only; the
@@ -4206,6 +4271,7 @@ function animate() {
   updateBikePrompt();
   updateEatPrompt();
   updateSleepPrompt();
+  updateContextButton();
   updateBuffUI();
   updateShadowFocus();
   updateNavHud(dt);
