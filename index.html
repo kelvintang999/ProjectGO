@@ -338,7 +338,7 @@
     <p class="menu-section">畫面</p>
     <button id="set-shadow" class="qc-btn set-row">光影<span class="set-val">開</span></button>
     <button id="set-night" class="qc-btn set-row">夜間<span class="set-val">關</span></button>
-    <button id="set-autolight" class="qc-btn set-row">自動光照<span class="set-val">開</span></button>
+    <button id="set-autolight" class="qc-btn set-row">自動光照<span class="set-val">關</span></button>
     <p id="sun-times" class="set-soon">日出日落讀取中…</p>
     <button id="set-nav" class="qc-btn set-row">導航模式<span class="set-val">開</span></button>
     <button id="set-reset" class="qc-btn">重置視角</button>
@@ -389,7 +389,7 @@ const dropHint = document.getElementById('drop-hint');
 
 // Build label (test 11⑩: nothing on the page showed the version).
 // Shown on the main menu + the HUD stats line; bump on every push.
-const BUILD_VERSION = '2026-11-23-5';
+const BUILD_VERSION = '2026-11-23-6';
 document.getElementById('version-menu').textContent = '版本 ' + BUILD_VERSION;
 
 // ---------- renderer / scene ----------
@@ -441,7 +441,7 @@ const SUN_LAT = 22.297;
 // mutable sun direction (updateShadowFocus aims the shadow camera
 // along it); fallback is a late-morning sun.
 let sunDir = new THREE.Vector3(0.8, 1.1, 0.5).normalize();
-let lightingAuto = true; // follow real time; a manual night toggle turns this off
+let lightingAuto = false; // default day; auto real-time sun is opt-in (uyu 2026-11-23: 預設不要進黑夜). A manual night toggle still works; the auto toggle in settings turns this back on
 let sunTimes = null; // { sunrise: Date, sunset: Date, maxElevDeg }
 // plaza street lamps (created in createLamps, after the map loads)
 let lampLights = [];
@@ -511,6 +511,13 @@ function frameModel() {
   metaEl.textContent = '已載入：' + (model.userData.name || '模型');
   setStatus('載入完成，拖曳旋轉、WASD 移動');
   barWrap.style.display = 'none';
+  // one-time HUD hint (mobile): the HUD now starts expanded; tell the
+  // player once how to collapse it. Delayed so it doesn't clobber the
+  // first-walk hint, and skipped if they already collapsed it.
+  if (isMobile && !uiHintShown) {
+    uiHintShown = true;
+    setTimeout(() => { if (!uiCollapsed) showToast('點右下角 ✕ 可以收起介面', 5000); }, 6000);
+  }
 }
 
 function updateShadowFocus() {
@@ -1599,6 +1606,7 @@ function updateWalkCamera() {
 // first-time walk hint: shown once, the first time the player switches
 // to walk mode (see setMode); once per page load, no localStorage
 let walkHintShown = false;
+let uiHintShown = false; // one-time "tap ✕ to collapse the HUD" toast (mobile, in onLoaded)
 function setMode(m) {
   // no flying inside the personal room
   if (m === 'fly' && inRoom) { showToast('房間裡不能飛行', 2000); return; }
@@ -1703,8 +1711,8 @@ function onError(err) {
   console.error(err);
   setStatus('載入失敗：' + (err && err.message ? err.message : err), true);
   barWrap.style.display = 'none';
-  // the error lives in #hud — if the UI is collapsed (mobile default),
-  // expand it so the failure is actually visible instead of silent
+  // the error lives in #hud — if the UI is collapsed, expand it so the
+  // failure is actually visible instead of silent
   setUICollapsed(false);
 }
 
@@ -1977,7 +1985,9 @@ function updateFerry(dt, t) {
 // ---------- UI collapse ----------
 // The HUD panel (title, stats, status, buttons) and the help line can be
 // hidden for a clean view; nav HUD, touch controls, prompts and toast stay.
-// Mobile defaults to collapsed (small screen); desktop defaults to expanded.
+// HUD starts expanded on all devices (uyu 2026-11-23: 預設不要收起 —
+// it's the only way to reach the interaction buttons on mobile); a
+// one-time toast in onLoaded tells mobile users how to collapse it.
 // Collapsing only hides elements — keyboard controls and button handlers
 // keep working, and labels update normally while hidden.
 let uiCollapsed = false;
@@ -1988,7 +1998,7 @@ function setUICollapsed(c) {
   uiToggleBtn.textContent = c ? '☰' : '✕';
 }
 uiToggleBtn.addEventListener('click', () => setUICollapsed(!uiCollapsed));
-setUICollapsed(isMobile);
+setUICollapsed(false);
 
 // ---------- input + animation ----------
 const keys = {};
