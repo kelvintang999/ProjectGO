@@ -110,8 +110,18 @@
     #toast { bottom: 160px; }
     #sit-prompt { bottom: 260px; }
     #car-prompt { bottom: 310px; }
+    #uiToggle { bottom: 100px; right: 20px; } /* above the 64px touch buttons (top edge 84px) */
   }
   #err { color: #fca5a5; }
+  /* UI collapse toggle: always visible, bottom-right (above the touch
+     buttons on mobile). Collapsing hides the HUD panel + help line only;
+     nav HUD, touch controls, prompts and toast stay visible. */
+  #uiToggle {
+    position: fixed; right: 12px; bottom: 12px; z-index: 15;
+    width: 48px; height: 48px; border-radius: 50%; padding: 0; font-size: 20px;
+    background: rgba(51, 65, 85, 0.85); border: 1px solid rgba(255,255,255,0.25);
+  }
+  body.ui-collapsed #hud, body.ui-collapsed #help { display: none; }
 </style>
 </head>
 <body>
@@ -140,7 +150,7 @@
   <input id="file" type="file" accept=".glb,.gltf" hidden>
 </div>
 
-<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下 · F 上車 · T 喝水</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車：搖桿上推加速、左右轉向</span></div>
+<div id="help"><span class="kb-help">飛行：WASD 飛 · Q / E 上下 · 拖曳轉視角 — 步行：WASD 移動 · Shift 跑 · 空白鍵飛 · Ctrl 降 · E 坐下 · F 上車 · T 喝水 · H 收起介面</span><span class="touch-help">飛行：單指拖曳轉視角 · 雙指縮放 — 步行：左搖桿移動 · 拖曳轉鏡頭 · 按住跑／升／降 — 開車：搖桿上推加速、左右轉向 · 右下角按鈕收起介面</span></div>
 <div id="toast"></div>
 <div id="sit-prompt"></div>
 <div id="car-prompt"></div>
@@ -157,6 +167,7 @@
     <button id="btn-down" class="touch-btn">降</button>
   </div>
 </div>
+<button id="uiToggle" title="收起／展開介面 (H)">☰</button>
 <div id="drop-hint">放開以載入 .glb</div>
 <div id="quality-choice">
   <div class="panel">
@@ -1030,6 +1041,9 @@ function onError(err) {
   console.error(err);
   setStatus('載入失敗：' + (err && err.message ? err.message : err), true);
   barWrap.style.display = 'none';
+  // the error lives in #hud — if the UI is collapsed (mobile default),
+  // expand it so the failure is actually visible instead of silent
+  setUICollapsed(false);
 }
 
 function loadFromUrl(url, name) {
@@ -1212,6 +1226,22 @@ function updateFerry(dt, t) {
   f.group.rotation.x = Math.sin(t * 0.6 + 1) * 0.008;
 }
 
+// ---------- UI collapse ----------
+// The HUD panel (title, stats, status, buttons) and the help line can be
+// hidden for a clean view; nav HUD, touch controls, prompts and toast stay.
+// Mobile defaults to collapsed (small screen); desktop defaults to expanded.
+// Collapsing only hides elements — keyboard controls and button handlers
+// keep working, and labels update normally while hidden.
+let uiCollapsed = false;
+const uiToggleBtn = document.getElementById('uiToggle');
+function setUICollapsed(c) {
+  uiCollapsed = c;
+  document.body.classList.toggle('ui-collapsed', c);
+  uiToggleBtn.textContent = c ? '☰' : '✕';
+}
+uiToggleBtn.addEventListener('click', () => setUICollapsed(!uiCollapsed));
+setUICollapsed(isMobile);
+
 // ---------- input + animation ----------
 const keys = {};
 window.addEventListener('keydown', (e) => {
@@ -1225,6 +1255,7 @@ window.addEventListener('keydown', (e) => {
     else if (e.code === 'KeyE') toggleSit();
     else if (e.code === 'KeyF') toggleCar();
     else if (e.code === 'KeyT') drinkWater();
+    else if (e.code === 'KeyH') setUICollapsed(!uiCollapsed);
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
