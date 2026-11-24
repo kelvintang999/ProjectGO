@@ -32,4 +32,8 @@ Building geometry comes from the Hong Kong Lands Department's Open3Dhk 3D map da
 
 - Three.js r160, Blender (map patches), GitHub Pages
 
+## License
+
+MIT covers the code in this repo. It does not cover the 3D assets: the character model is a Mixamo asset (royalty-free use in projects, not for redistribution), and the map geometry is Open3Dhk data (see Map data above). 3D models are served from Cloudflare R2 for the demo and are not stored in this repo.
+
 Based TPE, HKG

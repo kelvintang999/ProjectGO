@@ -32,4 +32,8 @@ English 版本請見 [README.md](README.md)。
 
 - Three.js r160、Blender（地圖修補）、GitHub Pages
 
+## 授權
+
+MIT 只覆蓋這個 repo 裡的程式碼，不包括 3D 素材：角色模型是 Mixamo 素材（免版稅使用、不可再分發），地圖幾何是 Open3Dhk 資料（見上方地圖資料）。3D 模型由 Cloudflare R2 提供給 demo 使用，不存放在這個 repo 裡。
+
 Based TPE, HKG
