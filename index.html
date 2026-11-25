@@ -448,7 +448,7 @@ const dropHint = document.getElementById('drop-hint');
 
 // Build label (test 11⑩: nothing on the page showed the version).
 // Shown on the main menu + the HUD stats line; bump on every push.
-const BUILD_VERSION = '2026-11-23-13';
+const BUILD_VERSION = '2026-11-23-14';
 const R2_BASE = 'https://pub-416445574a884243bd824c17d0b5a289.r2.dev'; // C-1: single source for the R2 host; switch domain here.
 document.getElementById('version-menu').textContent = '版本 ' + BUILD_VERSION;
 
@@ -2026,6 +2026,50 @@ function setShadows(on) {
   sun.castShadow = shadowsOn;
   scene.traverse((o) => { if (o.isMesh && o.material) o.material.needsUpdate = true; });
 }
+
+// C-4 phase 1: runtime FPS throttling. One-way degrade only (never
+// upgrades back, so it cannot oscillate): level 1 drops pixelRatio to
+// 1, level 2 turns shadows off. Steps that are already at their floor
+// (mobile starts at pixelRatio 1 with shadows off) are skipped without
+// a toast. Far-view culling is parked until measurements prove the far
+// view is the bottleneck (Muse review, 2026-11-25).
+let throttleLevel = 0;
+let lowFpsTime = 0;
+let throttleCooldown = 0;
+function throttleActive() {
+  if (!model || inRoom || pauseOpen || settingsOpen) return false;
+  return [mainMenuEl, choiceEl, pauseMenuEl, settingsMenuEl, dressupMenuEl]
+    .every((el) => !el || getComputedStyle(el).display === 'none');
+}
+function degradeForFps() {
+  let changed = false;
+  while (throttleLevel < 2 && !changed) {
+    throttleLevel++;
+    if (throttleLevel === 1 && renderer.getPixelRatio() > 1) {
+      renderer.setPixelRatio(1);
+      changed = true;
+    }
+    if (throttleLevel === 2 && shadowsOn) {
+      setShadows(false);
+      syncSettingsUI();
+      changed = true;
+    }
+  }
+  lowFpsTime = 0;
+  throttleCooldown = 5;
+  if (changed) showToast('已自動降低畫質以保持流暢', 3000);
+}
+function updateFpsThrottle(fps, windowSeconds) {
+  if (throttleCooldown > 0) throttleCooldown = Math.max(0, throttleCooldown - windowSeconds);
+  if (!throttleActive() || throttleLevel >= 2) { lowFpsTime = 0; return; }
+  if (fps < 25) {
+    lowFpsTime += windowSeconds;
+    if (lowFpsTime >= 5 && throttleCooldown <= 0) degradeForFps();
+  } else {
+    lowFpsTime = 0;
+  }
+}
+window.__pg.throttleState = () => ({ level: throttleLevel, lowFpsTime, cooldown: throttleCooldown, active: throttleActive() });
 
 // which GPU is the browser actually using? (dual-GPU laptops often run
 // Chrome on the integrated GPU, which is the #1 cause of low FPS here)
@@ -5144,8 +5188,10 @@ function animate() {
 
   frames++; fpsTime += dt;
   if (fpsTime >= 0.5) {
+    const fpsWindow = fpsTime;
     const fps = Math.round(frames / fpsTime);
     frames = 0; fpsTime = 0;
+    updateFpsThrottle(fps, fpsWindow);
     statsEl.textContent = model
       ? 'FPS ' + fps + ' · 三角面 ' + renderer.info.render.triangles.toLocaleString() + ' · Draw Calls ' + renderer.info.render.calls.toLocaleString() + ' · 幾何 ' + renderer.info.memory.geometries.toLocaleString() + ' · 貼圖 ' + renderer.info.memory.textures.toLocaleString() + '\n顯示卡：' + gpuName + '\n版本 ' + BUILD_VERSION
       : '顯示卡：' + gpuName + '\n版本 ' + BUILD_VERSION;
