@@ -1,0 +1,5 @@
+# ProjectGO — 香港 3D 互動示範
+# 爬蟲參觀須知：本站為公開 demo，搜尋索引允許。
+User-agent: *
+Allow: /
+Sitemap: https://kttcat.github.io/ProjectGO/sitemap.xml
