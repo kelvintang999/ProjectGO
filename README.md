@@ -8,7 +8,7 @@ Play it here: https://kttcat.github.io/ProjectGO/
 
 ## What it is
 
-An open-world walk around Tsim Sha Tsui, Hong Kong, rendered in the browser. You spawn at the Star Ferry pier plaza and can walk, drive, ride and fly through 460 real buildings across a 750 × 1200 m map. This web demo is a prototype to validate the core interactions; the full game targets Unreal Engine 5.8 → 6.0.
+An open-world walk around Tsim Sha Tsui, Hong Kong, rendered in the browser. You spawn at the Star Ferry pier plaza and can walk, drive, ride and fly through 460 real buildings across a 750 × 1200 m map. This web demo is a prototype to validate the core interactions; the full game targets Unreal Engine 6.
 
 ## Features
 
@@ -35,5 +35,3 @@ Building geometry comes from the Hong Kong Lands Department's Open3Dhk 3D map da
 ## License
 
 MIT covers the code in this repo. It does not cover the 3D assets: the character model is a Mixamo asset (royalty-free use in projects, not for redistribution), and the map geometry is Open3Dhk data (see Map data above). 3D models are served from Cloudflare R2 for the demo and are not stored in this repo.
-
-Based TPE, HKG
