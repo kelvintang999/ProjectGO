@@ -2583,7 +2583,7 @@ function loadBryce() {
     const clips = {};
     for (const c of g.animations) clips[c.name] = c;
     bryce = { group, mixer, clips, loco: null, oneShot: null, current: null,
-      spine: group.getObjectByName('mixamorig:Spine'), rideLean: 0 };
+      spine: group.getObjectByName('mixamorigSpine'), rideLean: 0 };
     scene.add(group);
     charGroup.visible = false; // procedural character stands down
     playLoco('Idle');
